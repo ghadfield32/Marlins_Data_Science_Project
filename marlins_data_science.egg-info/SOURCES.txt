@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+marlins_data_science.egg-info/PKG-INFO
+marlins_data_science.egg-info/SOURCES.txt
+marlins_data_science.egg-info/dependency_links.txt
+marlins_data_science.egg-info/requires.txt
+marlins_data_science.egg-info/top_level.txt
+src/train.py

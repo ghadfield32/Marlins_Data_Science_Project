@@ -1,0 +1,6 @@
+est_distance
+ev_la_product
+ev_la_sqrt
+hangtime
+hard_hit_True
+launch_angle

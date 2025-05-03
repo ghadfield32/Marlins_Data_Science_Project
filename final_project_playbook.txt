@@ -1,0 +1,136 @@
+Below is a playbook you can follow to craft a submission that (1) demonstrates rigorous statistical thinking, (2) communicates clearly, and (3) show-cases the exact skills the Marlins R&D group say they value. Everything is mapped directly to bullet points in their prompt
+
+.
+1 Set the stage (½ page)
+What	Why it matters to them	How to do it quickly
+Business goal – “Estimate each hitter’s true exit-velo ability and project it to 2024.”	Shows you keep the objective in view.	One crisp paragraph.
+High-level plan – hierarchical model + age-curve + level & competition adjustments + predictive posterior for 2024.	Signals you already see the whole road map.	A numbered list of the four major modules.
+2 Data preparation & EDA (1–1.5 pages)
+
+    Data hygiene checklist
+
+        Missingness patterns → table & heatmap.
+
+        Outliers → boxplots of EV by level, age; flag ±4 σ.
+
+        Consistency checks (duplicate IDs, absurd heights).
+
+    Feature engineering
+    Feature	Rationale
+    Centered age (age − 27)	Linearizes typical EV-vs-age curve.
+    Level ladder (AA = −2, AAA = −1, MLB = 0)	Encodes run-environment/quality step sizes.
+    Pitcher quality index (mean opponent EV-allowed)	Competition adjustment.
+    Contact quality bucket (LA × hit-type)	Separates skill from contact mix.
+
+    Exploratory visuals
+
+        EV density by level & age → convince them you looked for shifting distributions.
+
+        Scatter: mean EV vs. pitcher-quality to motivate that covariate.
+
+        Variogram or ACF across time per batter to test time-series structure claim.
+
+    Tip: keep code cells that generate every graphic and cache processed parquet/feather so the notebook re-runs < 2 min.
+
+3 Modeling methodology (2–3 pages)
+3.1 Hierarchical partial-pooling core
+exit_veloij∼N(μbj+β1Levelij+β2Ageij+β3PitchQualij,  σ2)
+exit_veloij​∼N(μbj​​+β1​Levelij​+β2​Ageij​+β3​PitchQualij​,σ2)
+μbj∼N ⁣(γ0+γ1Agej,mean+γ2Levelj,mode,  τ2)
+μbj​​∼N(γ0​+γ1​Agej,mean​+γ2​Levelj,mode​,τ2)
+
+    Why hierarchical?
+    Borrow strength for batters with few balls in play while letting stars differentiate.
+
+    Software – bambi or CmdStanPy; both Stan & PyMC are common in MLB R&D.
+
+3.2 Age-curve projection
+
+    Fit a semiparametric GAM spline on posterior μ-batter vs. age (all levels combined) to learn ΔEV per year.
+
+    For projection to 2024:
+    μ^b,2024=μ^b,last+fage(Age2024)−fage(Agelast)
+    μ
+
+​b,2024​=μ
+
+    ​b,last​+fage​(Age2024​)−fage​(Agelast​)
+
+3.3 Level & competition adjustments
+Layer	Implementation	Checkpoint
+Fixed-effect Level term	coefficient β₁ above.	Posterior for β₁ should be negative (AA < AAA < MLB).
+Pitcher-quality covariate	rolling 30-day mean EV-allowed.	Posterior β₃ should hover ≈ 0.3 mph per 1 mph easier opponent – sanity sign.
+3.4 Uncertainty quantification
+
+    Draw 1 000 posterior samples of each batter’s 2024 μ.
+    Output mean, SD, and 80 % & 95 % credible intervals.
+
+    Rank-ordering by posterior means and give “probability top-30 %” flags – front offices love actionable probabilities.
+
+    Stretch (time-permitting): add a latent AR(1) term for within-batter evolution instead of simple age spline.
+
+4 Validation & predictive accuracy (1 page)
+
+    Back-test: train through 2022, predict 2023 MLB EV, report RMSE & CRPS for posterior predictive distribution.
+
+    Posterior predictive checks: overlay replicated vs. observed EV histograms by level.
+
+    Calibration plot: credible-interval coverage vs. nominal.
+
+Carry those plots into the PDF—they visually prove model adequacy.
+5 Results & interpretation (½–1 page)
+
+    Table of top-15 risers/fallers in projected EV.
+    Highlight one interesting prospect-to-big-leaguer case with narrative (“age-19 AA masher X still projects 91 mph even after AAA penalty”).
+
+    Discuss variance shrinkage: show raw vs. posterior μ scatter—demonstrates understanding of noise vs. signal.
+
+6 Future-work roadmap (≤ ½ page)
+
+Bullet list (3-5 items), e.g.:
+
+    Incorporate bat-tracking metrics when available.
+
+    Joint model of EV and launch-angle bands (EV alone misses barrel quality).
+
+    Use Dirichlet-process random effects to relax normality assumption on μ_b.
+
+    Model Hawkes-process fatigue effects on pitchers to sharpen competition adjustment.
+
+Mentioning advanced ideas (even if not executed) signals depth but keeps scope realistic.
+7 Deliverables checklist
+Item	Must-have	Nice	Notes
+Well-commented notebook	✓		Clear section headers matching outline.
+README.md with setup & run commands	✓		conda env create -f env.yml
+env.yml/requirements.txt	✓		Pin versions; note Stan installs.
+Repro code for predictions (predict.py)	✓		CLI: python predict.py --model models/final.pkl --validate exit_velo_validate_data.csv.
+PDF report (≤ 8 pages)	✓		Use same numbering as outline.
+CSV of projections	✓		columns: batter_id, proj_ev_2024, sd, ci80_low, ci80_high.
+8 Storytelling tips that land with R&D reviewers
+
+    Lead with process, finish with insight. Their rubric puts methodology first.
+
+    Quantify uncertainty everywhere – MLB front offices thrive on risk-adjusted decisions.
+
+    Write like an analyst, not a blogger. Formal but concise; avoid “I feel”, favor “posterior estimates indicate”.
+
+    Highlight baseball intuition. E.g., “Young hitters show 0.9 mph/year growth until age 25, aligning with known strength gains.”
+
+    Be explicit about limitations (small-sample hitters, stat-cast park effects) and how you’d address them with more time.
+
+Final sanity checks before submission
+
+    Notebook runs clean start-to-finish on fresh clone (< 10 min CPU).
+
+    Every figure cited in PDF exists and has a caption.
+
+    No unexplained acronyms; spell out EV, GAM etc. on first use.
+
+    Predictions file shape matches exit_velo_validate_data.csv row-count exactly.
+
+    PDF header: full name, email, GitHub link.
+
+Follow this blueprint and you’ll present a thorough, reproducible, analytically rigorous solution that spotlights the exact competencies the Marlins list: modeling process, communication, and—by the back-test—predictive accuracy. Good luck!
+
+
+
