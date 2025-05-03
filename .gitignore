@@ -1,4 +1,32 @@
+# Python virtual environments
 .venv/
 .env/
+__pycache__/
+.mypy_cache/
+*.py[cod]
+*$py.class
 
-.cursor
+# Editor settings
+.cursor/
+.vscode/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Large data files
+data/Research Data Project/
+data/models/saved_models/
+
+# Dependency directories
+node_modules/
+mcp_workspace/
+
+# Environment variables
+.env*
+!.env.example
