@@ -17,7 +17,7 @@ build/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-*.ipynb
+#*.ipynb
 
 # Large data files
 data/Research Data Project/
