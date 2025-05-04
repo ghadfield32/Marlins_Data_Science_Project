@@ -14,7 +14,7 @@ from __future__ import annotations
 import pandas as pd
 from sklearn.model_selection import KFold
 from typing import Callable, List, Union
-
+import statsmodels as sm
 
 def _split_xy(df: pd.DataFrame):
     X = df.drop(columns=["exit_velo"])
@@ -93,39 +93,78 @@ def posterior_predictive_check(idata, df, batter_idx):
 
 
 
+def prediction_interval(model, X, alpha=0.05, method='linear'):
+    """
+    Compute prediction intervals for a model.
+    """
+    if method == 'linear':
+        # For OLS and Ridge
+        X_const = sm.add_constant(X)
+        preds = model.get_prediction(X_const)
+        pred_int = preds.conf_int(alpha=alpha)
+        return preds.predicted_mean, pred_int[:, 0], pred_int[:, 1]
+    elif method == 'bayesian':
+        # For Bayesian models
+        hdi = az.hdi(model, hdi=1 - alpha)
+        return (
+            hdi.posterior_predictive.y_obs.sel(hdi=f"{alpha/2*100}%"),
+            hdi.posterior_predictive.y_obs.sel(hdi=f"{(1-alpha/2)*100}%")
+        )
+    elif method == 'gbm':
+        # For XGBoost quantile regression
+        lower = model.predict(X, pred_contribs=False, iteration_range=(0, model.best_iteration))
+        upper = model.predict(X, pred_contribs=False, iteration_range=(0, model.best_iteration))
+        return lower, upper  # Replace with actual quantile regression
+    else:
+        raise ValueError("Method not supported")
 
+# Example for bootstrapping GBM
+def bootstrap_prediction_interval(model, X, n_bootstraps=1000, alpha=0.05):
+    preds = np.zeros((n_bootstraps, X.shape[0]))
+    for i in range(n_bootstraps):
+        indices = np.random.choice(X.shape[0], X.shape[0], replace=True)
+        preds[i] = model.predict(X[indices])
+    lower = np.percentile(preds, 100 * alpha / 2, axis=0)
+    upper = np.percentile(preds, 100 * (1 - alpha / 2), axis=0)
+    return lower, upper
+
+
+# ───────────────────────────────────────────────────────────────────────
+# 6. Smoke test (only run when module executed directly)
+# ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     from src.data.load_data import load_raw
-    from src.features.preprocess import preprocess
-    from src.models.hierarchical import fit_bayesian_hierarchical
-    path = 'data/Research Data Project/Research Data Project/exit_velo_project_data.csv'
-    df = load_raw(path)
-    print(df.head())
-    print(df.columns)
+    from src.features.feature_engineering import feature_engineer
+    from src.features.preprocess import prepare_for_mixed_and_hierarchical
 
-    # --- inspect nulls in the raw data ---
-    null_counts = df.isnull().sum()
-    null_counts = null_counts[null_counts > 0]
-    if null_counts.empty:
-        print("✅  No missing values in raw data.")
-    else:
-        print("=== Raw data null counts ===")
-        for col, cnt in null_counts.items():
-            print(f" • {col!r}: {cnt} missing")
-    df_clean = preprocess(df)
-    # show before and after
-    print(f"Before: {df_train.head()}")
-    print(f"After: {df_clean.head()}")
+    raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
+    df = load_raw(raw_path)
+    df_fe = feature_engineer(df)
 
+    # Prepare the DataFrame
+    df_model = prepare_for_mixed_and_hierarchical(df_fe)
+
+    # Extract arrays for PyMC
+    batter_idx   = df_model["batter_id"].cat.codes.values
+    level_idx    = df_model["level_idx"].values
+    age_centered = df_model["age_centered"].values
+
+    # Fit the Bayesian hierarchical model
     idata = fit_bayesian_hierarchical(
-    df_clean,
-    batter_idx=df_clean.batter_id.cat.codes.values,
-    level_idx=df_clean.level_idx.values,
-    age_centered=df_clean.age_centered.values,
-    mu_prior=90,      # use league ave +/–5 mph
-    sigma_prior=5
+        df_model, batter_idx, level_idx, age_centered,
+        mu_prior=90, sigma_prior=5,
+        sampler="jax",   #  <-- GPU NUTS
+        draws=1000, tune=1000
     )
 
-    posterior_predictive_check(idata, df_clean, df_clean.batter_id.cat.codes.values)
+    print(idata)
 
+    posterior_predictive_check(idata, df_model, df_model.batter_id.cat.codes.values)
 
+    # For Bayesian model:
+    lower, upper = prediction_interval(idata, test_df, method='bayesian')
+    print(f"Bayesian 95% Prediction Interval: {lower.mean():.2f}–{upper.mean():.2f} mph")
+
+    # For Ridge model:
+    pred, lower, upper = prediction_interval(model_ridge, X_test, method='linear')
+    print(f"Ridge 95% Prediction Interval: {lower[0]:.2f}–{upper[0]:.2f} mph")

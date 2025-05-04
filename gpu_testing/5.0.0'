@@ -1,0 +1,19 @@
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+  File "<string>", line 1
+    import os; os.chdir('/app'); print('Installing required packages...'); import subprocess; subprocess.check_call(['pip', 'install', 'pandas', 'pymc, 'arviz', 'scikit-learn', 'tqdm', 'shap', 'matplotlib']); import jax; print('JAX version:', jax.__version__); print('JAX devices:', jax.devices()); print('GPU count:', jax.device_count('gpu')); jax.config.update('jax_enable_x64', True); print('Running hierarchical model with GPU support...'); from src.data.load_data import load_raw; from src.features.feature_engineering import feature_engineer; from src.features.preprocess import prepare_for_mixed_and_hierarchical; raw_path = 'data/Research Data Project/Research Data Project/exit_velo_project_data.csv'; df = load_raw(raw_path); df_fe = feature_engineer(df); df_model = prepare_for_mixed_and_hierarchical(df_fe); batter_idx = df_model['batter_id'].cat.codes.values; level_idx = df_model['level_idx'].values; age_centered = df_model['age_centered'].values; from src.models.hierarchical import fit_bayesian_hierarchical; idata = fit_bayesian_hierarchical(     df_model, batter_idx, level_idx, age_centered,     mu_prior=90, sigma_prior=5,     sampler='jax',     draws=1000, tune=1000 ); print('Model fitting complete!')
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ^
+SyntaxError: unterminated string literal (detected at line 1)

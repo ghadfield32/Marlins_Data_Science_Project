@@ -3,7 +3,73 @@
 ## Project Overview
 This project implements hierarchical Bayesian modeling for baseball exit velocity data, focusing on batter-specific effects and adjusting for covariates like player level and age.
 
-## Directory Structure
+## Docker Setup for JAX with GPU Support
+
+This project uses Docker to provide a consistent environment with GPU support for JAX.
+
+### Prerequisites
+
+1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+2. [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed
+3. NVIDIA GPU drivers installed on your host machine
+
+### Installation Steps for NVIDIA Container Toolkit on Windows
+
+1. Install [NVIDIA GPU drivers](https://www.nvidia.com/Download/index.aspx) for your GPU
+2. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
+3. Enable WSL 2 backend in Docker Desktop settings
+4. Enable GPU support in Docker Desktop:
+   - Go to Settings > Resources > WSL Integration
+   - Enable "Use the WSL 2 based engine"
+   - Go to Settings > General
+   - Check "Use WSL 2 based engine"
+
+### Building and Running the Container
+
+```bash
+# Build and start the container
+docker compose up -d
+
+# Run the JAX GPU test
+docker compose exec marlins-jax python pymc_jax_example.py
+
+# Alternatively, get a shell in the container
+docker compose exec marlins-jax bash
+```
+
+### Checking GPU Access
+
+To verify JAX has GPU access:
+
+```python
+import jax
+print(jax.devices())  # Should show GPU devices
+print(jax.default_backend())  # Should show 'gpu'
+```
+
+### Stopping the Container
+
+```bash
+docker compose down
+```
+
+### Troubleshooting
+
+If you encounter GPU detection issues:
+
+1. Verify NVIDIA drivers are properly installed:
+   ```bash
+   nvidia-smi
+   ```
+
+2. Check that Docker can see GPUs:
+   ```bash
+   docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+   ```
+
+3. Make sure you have the correct CUDA version in the container (12.x recommended for newer GPUs).
+
+## Project Structure
 ```
 Marlins_Data_Science_Project/
 ├─ data/                        # Raw data storage

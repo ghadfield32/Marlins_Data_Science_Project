@@ -31,16 +31,12 @@ dependencies = [
   "shapiq>=0.1.0",
   "explainerdashboard>=0.3.0",
   "ipywidgets>=8.0.0",
-
-  # ─── Correct NumPyro constraint ───────────────────────────
-  # only versions up through the current 0.x series exist
+  "nutpie>=0.7.1",   # new: nutpie backend for PyMC
   "numpyro>=0.18.0,<1.0.0",
-
-  # ─── JAX: pin to a minor or loosen for newer wheels
   "jax==0.6.0",
-  #"jaxlib==0.6.0",        # optionally loosen to let pip pick newer
-
-  # Remove pymc[NumPyro] — install numpyro separately
+  "jaxlib==0.6.0",
+  "pytensor>=2.18.3",  # explicit version for CUDA support
+  "aesara>=2.9.4",     # alternative backend option
 ]
 
 [project.optional-dependencies]
@@ -51,3 +47,14 @@ dev = [
   "flake8>=5.0.0",
   "mypy>=1.0.0",
 ]
+
+cuda = [
+  "cupy-cuda12x>=12.0.0",  # For CUDA 12.x
+]
+
+[tool.pytensor]
+# Default configuration for PyTensor
+device = "cuda"          # Use CUDA by default if available
+floatX = "float32"       # Use float32 by default for better CUDA performance
+allow_gc = true          # Allow garbage collection
+optimizer = "fast_run"   # Fast run optimization by default
