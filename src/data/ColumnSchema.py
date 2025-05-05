@@ -62,6 +62,9 @@ class _ColumnSchema:
         "player_ev_mean50",
         "player_ev_std50",
         "pitcher_ev_mean50",
+        "level_idx",
+        "season_centered",
+        "age_centered"
     ]
 
     _TARGET_COL: str = "exit_velo"

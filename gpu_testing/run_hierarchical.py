@@ -47,7 +47,7 @@ except Exception as e:
 
 print('Running hierarchical model with GPU support...')
 try:
-    from src.models.hierarchical import fit_bayesian_hierarchical
+    from models.archive.hierarchical import fit_bayesian_hierarchical
     idata = fit_bayesian_hierarchical(
         df_model, batter_idx, level_idx, age_centered,
         mu_prior=90, sigma_prior=5,

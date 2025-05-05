@@ -68,11 +68,14 @@ def feature_engineer(df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     df["age_sq"] = df["age"] ** 2  # capture non‑linear aging curve
     n_age_bins = 4
     df["age_bin"] = pd.qcut(df["age"], q=n_age_bins, duplicates='drop')
-
+    
     # ────────────────────────────────────────────────────────────────────────
     # 3. Height normalisation relative to MLB average (~74 inches)
     # ────────────────────────────────────────────────────────────────────────
-    df["height_diff"] = df["batter_height"] - 74
+    avg_batter_height = df["batter_height"].mean()
+    
+    # Use the average batter height to calculate height_diff
+    df["height_diff"] = df["batter_height"] - avg_batter_height
 
     # ────────────────────────────────────────────────────────────────────────
     # 4. Launch / spray angle buckets (dynamic quantile bins) & barrel indicator
@@ -125,12 +128,13 @@ def feature_engineer(df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     # 9b. EV × LA and distance proxy
     df["ev_la_product"] = df["exit_velo"] * (df["launch_angle"] + 90)
     df["est_distance"] = df["exit_velo"] * df["hangtime"]
-    #  Variance‑stabilised EV×LA
     df["ev_la_sqrt"] = np.sqrt(df["ev_la_product"].clip(lower=0))
 
-    # 10. Pitcher rolling stats
+    # 10. Pitcher rolling stats 
+    pitcher_mean = df["exit_velo"].mean()
     df["pitcher_ev_mean50"] = _rolling_stat(df, ["pitcher_id"], "exit_velo", "mean", 50)
-    df["pitcher_ev_mean50"].fillna(df["exit_velo"].mean(), inplace=True)
+    df["pitcher_ev_mean50"] = df["pitcher_ev_mean50"].fillna(pitcher_mean)
+
 
     # 11. Outcome encoding – simple value mapping for power/speed signal.
     _OUTCOME_W = {
@@ -142,6 +146,11 @@ def feature_engineer(df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
     }
     df["outcome_val"] = df["outcome"].str.lower().map(_OUTCOME_W)
 
+    # centred covariates
+    df["age_centered"]    = df["age"] - df["age"].median()
+    df["season_centered"] = df["season"] - df["season"].median()   # ⬅ NEW
+    df["level_idx"]       = df["level_abbr"].map({"AA": 0, "AAA": 1, "MLB": 2})
+    
     return df
 
 ###############################################################################
@@ -170,3 +179,4 @@ if __name__ == "__main__":
 
     print("Raw →", df.shape, "//  Feature‑engineered →", df_fe.shape)
     print(df_fe.head())
+    print(df_fe.columns)

@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Run the hierarchical model module directly
 print("Running hierarchical model with JAX GPU support...")
-from src.models.hierarchical import fit_bayesian_hierarchical
+from models.archive.hierarchical import fit_bayesian_hierarchical
 from src.data.load_data import load_raw
 from src.features.feature_engineering import feature_engineer
 from src.features.preprocess import prepare_for_mixed_and_hierarchical

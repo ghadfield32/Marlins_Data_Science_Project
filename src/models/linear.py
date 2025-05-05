@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
-from src.features.preprocess import preproc             # ← existing CT
 
 
 def _split_xy(df: pd.DataFrame):
@@ -21,18 +20,17 @@ def _split_xy(df: pd.DataFrame):
     return X, y
 
 
-def fit_ridge(train: pd.DataFrame,
-              test: pd.DataFrame,
+def fit_ridge(X_tr: pd.DataFrame,
+              y_tr: pd.DataFrame,
+              X_te: pd.DataFrame,
+              y_te: pd.DataFrame,
               alpha: float = 1.0):
     """
     Returns (sklearn Pipeline, RMSE on test set).
     """
-    X_tr, y_tr = _split_xy(train)
-    X_te, y_te = _split_xy(test)
 
     model = Pipeline(
-        [("prep", preproc),
-         ("reg" , Ridge(alpha=alpha, random_state=0))]
+        [("reg" , Ridge(alpha=alpha, random_state=0))]
     ).fit(X_tr, y_tr)
 
     pred = model.predict(X_te)
@@ -45,7 +43,10 @@ if __name__ == "__main__":
     from pathlib import Path
     from src.data.load_data import load_raw
     from src.features.feature_engineering import feature_engineer
-
+    from src.data.ColumnSchema import _ColumnSchema
+    from sklearn.model_selection import train_test_split
+    from src.features.preprocess import summarize_categorical_missingness
+    from src.features.preprocess import fit_preprocessor, transform_preprocessor, inverse_transform_preprocessor
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
     df = load_raw(raw_path)
     print(df.head())
@@ -96,13 +97,16 @@ if __name__ == "__main__":
         print(null_counts)
 
     train_df, test_df = train_test_split(df_fe, test_size=0.2, random_state=42)
-
-
+    
+    # only on training data for linear/XGB
+    train_df = clip_extreme_ev(train_df)
+    #valid_df = clip_extreme_ev(valid_df)
+    
     # run with debug prints
     X_train, y_train, tf = fit_preprocessor(train_df, model_type='linear', debug=True)
     X_test,  y_test      = transform_preprocessor(test_df, tf)
 
-
+        
     print("Processed shapes:", X_train.shape, X_test.shape)
 
     # Example of inverse transform: 
@@ -111,5 +115,8 @@ if __name__ == "__main__":
     print("\n✅ Inverse‐transformed head (should mirror your original X_train):")
     print(df_back.head())
     print("Shape:", df_back.shape, "→ original X_train shape before transform:", X_train.shape)
+    
 
-
+    # === NEW: Train & evaluate Ridge regression ===
+    model_ridge, rmse_ridge = fit_ridge(X_train, y_train, X_test,  y_test)
+    print(f"Ridge regression RMSE: {rmse_ridge:.4f}")

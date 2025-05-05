@@ -1,8 +1,31 @@
 
-import jax
 import pymc as pm
 import arviz as az
 import numpy as np
+from src.data.ColumnSchema import _ColumnSchema
+from src.features.preprocess import transform_preprocessor
+# ── Attempt to import JAX ──────────────────────────────────────
+USE_JAX = True
+try:
+    import jax
+    # Debug: confirm what module is loaded
+    print(f"🔍 JAX module: {jax!r}")
+    print(f"🔍 JAX path:   {getattr(jax, '__file__', 'builtin')}")
+    # Ensure version attribute exists (guards circular-import)
+    if not hasattr(jax, "__version__"):
+        raise ImportError("jax.__version__ missing—possible circular import")
+    print(f"✅ JAX version: {jax.__version__}")
+    # Enable 64-bit floats on GPU/CPU
+    jax.config.update("jax_enable_x64", True)
+except Exception as e:
+    USE_JAX = False
+    print(f"⚠️  Warning: could not import JAX ({e}). Falling back to CPU sampling.")
+
+import pymc as pm
+import arviz as az
+import numpy as np
+import pandas as pd
+
 
 # Configure JAX for GPU use and X64 precision
 jax.config.update("jax_enable_x64", True)
@@ -26,140 +49,161 @@ def _timed_section(label: str):
     yield
     dt = time.time() - t0
     print(f"[{label}] finished in {dt:,.1f} s")
+    
+
+
+
+# src/models/hierarchical.py
 
 def fit_bayesian_hierarchical(
-    df,
+    df_raw,
+    transformer,
     batter_idx: np.ndarray,
     level_idx: np.ndarray,
-    age_centered: np.ndarray,
-    mu_prior: float,
-    sigma_prior: float,
     *,
-    use_ar1: bool = False,
-    sampler: str = "nuts",          # "nuts", "nutpie", or "advi"
-    draws: int = 1000,
-    tune: int = 1000,
-    advi_iters: int = 50_000,
+    feature_list: list[str] | None = None,
+    use_ar1: bool   = False,
+    mu_prior: float = 0.0,
+    sigma_prior: float = 1.0,
+    sampler: str    = "nuts",
+    draws: int      = 1000,        # bumped from 5 → 1000
+    tune: int       = 1000,        # bumped from 5 → 1000
+    target_accept: float = 0.95,   # raised from 0.9 → 0.95
+    rhat_threshold: float = 1.01,
+    ess_threshold: int     = 100,
 ):
     """
-    Hierarchical Exit‑Velocity model with rich progress bars & ETAs.
-    Returns a single ArviZ InferenceData object (posterior ⊕ PPC).
+    Hierarchical EV model with:
+      • Non-centered random effects for u
+      • Longer sampling (draws/tune=1000)
+      • Higher target_accept to reduce divergences
     """
-    y      = df["exit_velo"].values
-    n_bat  = df["batter_id"].nunique()
-    n_lvl  = df["level_idx"].nunique()
+    cols = _ColumnSchema()
+    if feature_list is None:
+        feature_list = cols.model_features()
 
+    # 1) transform inputs
+    X_all, y_ser = transform_preprocessor(df_raw, transformer)
+    names        = transformer.get_feature_names_out()
+    mask = np.array([n in feature_list for n in names])
+    X    = X_all[:, mask]
+    y    = y_ser.values
+
+    # 2) dims
+    n_obs, n_feat = X.shape
+    n_bat         = int(batter_idx.max() + 1)
+    n_lvl         = int(level_idx.max()   + 1)
+
+    # 3) build model
     with pm.Model() as model:
-        # ─── Priors ────────────────────────────────────────────────
         mu         = pm.Normal("mu", mu_prior, sigma_prior)
-        beta_level = pm.Normal("beta_level", 0.0, 5.0, shape=n_lvl)
-        beta_age   = pm.Normal("beta_age",   0.0, 1.0)
+        beta_level = pm.Normal("beta_level", 0, 1, shape=n_lvl)
+        beta       = pm.Normal("beta", 0, 1, shape=n_feat)
         sigma_b    = pm.HalfNormal("sigma_b", sigma_prior)
-        sigma_e    = pm.HalfNormal("sigma_e", sigma_prior / 2)
 
-        u = (
-            pm.GaussianRandomWalk("u", sigma=sigma_b, shape=n_bat)
-            if use_ar1 else
-            pm.Normal("u", mu=0.0, sigma=sigma_b, shape=n_bat)
-        )
+        # --- NON-CENTERED u: robust to funnel geometry ---
+        u_raw = pm.Normal("u_raw", 0, 1, shape=n_bat)
+        u     = pm.Deterministic("u", u_raw * sigma_b)
 
-        theta = (
-            mu
-            + beta_level[level_idx]
-            + beta_age * age_centered
-            + u[batter_idx]
-        )
+        theta = mu + beta_level[level_idx] + pm.math.dot(X, beta) + u[batter_idx]
+        sigma_e = pm.HalfNormal("sigma_e", sigma_prior)
         pm.Normal("y_obs", mu=theta, sigma=sigma_e, observed=y)
 
-        # ─── Inference ─────────────────────────────────────────────
-        if sampler == "advi":
-            print(f"Running ADVI ({advi_iters:,} iters) …")
-            with _timed_section("ADVI"):
-                approx = pm.fit(
-                    n=advi_iters,
-                    method="advi",
-                    progressbar=True,
-                )                    # PyMC shows a tqdm bar internally
-            with _timed_section("Sampling from ADVI guide"):
-                idata = approx.sample(draws=draws, progressbar=True)
-
-        else:                        # HMC family
-            total_steps = (draws + tune)
-            print(f"Running {sampler.upper()} : {draws:,} draws + "
-                  f"{tune:,} tune per chain (4 chains → {total_steps*4:,} steps)")
-            sample_kwargs = dict(
-                draws=draws, tune=tune, chains=4,
-                target_accept=0.9, return_inferencedata=True,
-                progressbar=True                      # PyMC uses tqdm
+        # --- Sampling with stronger defaults ---
+        with _timed_section("Sampling"):
+            idata = pm.sample(
+                draws=draws,
+                tune=tune,
+                chains=4,
+                target_accept=target_accept,
+                nuts_sampler="numpyro" if (sampler=="jax" and USE_JAX) else "nuts",
+                progressbar=True,
             )
-            # select sampler backend
-            if sampler == "nutpie":
-                sample_kwargs["nuts_sampler"] = "nutpie"
-            elif sampler == "jax":
-                # Use JAX backend with GPU
-                print("Using JAX on GPU for sampling")
-                sample_kwargs["nuts_sampler"] = "numpyro"
-                if jax.device_count("gpu") > 0:
-                    print("GPU is available for sampling")
-                else:
-                    print("Warning: No GPU detected, using CPU instead")
+        with _timed_section("Posterior Predictive"):
+            ppc = pm.sample_posterior_predictive(idata, var_names=["y_obs"])
 
-            # Attempt JAX HMC, catch XLA dtype bug and fallback to nutpie
-            with _timed_section("HMC sampling"):
-                try:
-                    idata = pm.sample(**sample_kwargs)
-                except Exception as e:
-                    # detect JAX XLARuntimeError by message or type
-                    if "CpuCallback error" in str(e) or "Incorrect output dtype" in str(e):
-                        print("⚠️  JAX sampler failed due to dtype bug; falling back to nutpie sampler")
-                        sample_kwargs["nuts_sampler"] = "nutpie"
-                        idata = pm.sample(**sample_kwargs)
-                    else:
-                        print(f"Error during sampling: {e}")
-                        raise
+    # attach ppc
+    idata.extend(ppc)
 
-        # ─── Posterior predictive ─────────────────────────────────
-        n_ppc = y.size * draws
-        print(f"Generating PPC ({draws:,} draws → {n_ppc:,} values) …")
-        with _timed_section("Posterior predictive"):
-            ppc = pm.sample_posterior_predictive(
-                idata, var_names=["y_obs"], progressbar=True
-            )
+    # 4) diagnostics
+    summary = az.summary(idata,
+                         var_names=["mu", "beta", "beta_level", "sigma_b", "sigma_e"],
+                         round_to=2)
+    bad_rhat = summary[summary["r_hat"] > rhat_threshold]
+    bad_ess  = summary[summary["ess_bulk"] < ess_threshold]
+    if not bad_rhat.empty:
+        print(f"⚠️  {len(bad_rhat)} parameters with R̂ > {rhat_threshold}")
+    if not bad_ess.empty:
+        print(f"⚠️  {len(bad_ess)} parameters with ESS < {ess_threshold}")
+    if bad_rhat.empty and bad_ess.empty:
+        print("✅  All sampler diagnostics OK")
 
-    return az.concat(idata, ppc)
+    return idata
 
 
 
 # ───────────────────────────────────────────────────────────────────────
 # 6. Smoke test (only run when module executed directly)
+# data:
+#     Data Used in the Hierarchical Model
+# Exit Velocity Measurements
+
+# Your outcome variable y is each batted-ball’s exit velocity, as recorded by Statcast—i.e., the speed (mph) at which the ball leaves the bat
+# baseballsavant.com
+# . Statcast began tracking exit velocity league-wide in 2015, using high-speed cameras and radar to measure every play
+# Wikipedia
+# .
+# Covariates: Age and Competition Level
+
+# You include each player’s centered age (age_centered) to capture how batting strength changes with age. Centering (subtracting the median) improves model convergence and interpretability. The discrete competition levels (level_idx: AA=0, AAA=1, MLB=2) let you estimate systematic differences in exit velocity across minor-league versus major-league play.
+# Random Effects: Batter Identity
+
+# By treating batter_id as a categorical random effect (u[batter_idx]), you allow each hitter to have his own baseline deviation from the global mean. This “partial pooling” borrows strength across batters—shrinking estimates for low-sample hitters toward the overall mean—so rarer batters aren’t grossly over- or under-estimated
+# PyMC
+# .
 # ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    from pathlib import Path
     from src.data.load_data import load_raw
     from src.features.feature_engineering import feature_engineer
-    from src.features.preprocess import prepare_for_mixed_and_hierarchical
+    from src.features.preprocess import fit_preprocessor, prepare_for_mixed_and_hierarchical
+    from src.models.hierarchical_utils import save_model, load_model
 
+    MODEL_PATH = "data/models/saved_models/exitvelo_hmc.nc"
 
-    raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
+    # 1) Load raw and featurize
+    raw_path = Path("data/Research Data Project/Research Data Project/exit_velo_project_data.csv")
     df = load_raw(raw_path)
     df_fe = feature_engineer(df)
 
-    # Prepare the DataFrame
+    # 2) Prepare for mixed/hierarchical (drops bunts, NA, sets batter_id category)
     df_model = prepare_for_mixed_and_hierarchical(df_fe)
 
-    # Extract arrays for PyMC
-    batter_idx = df_model["batter_id"].cat.codes.values
-    level_idx = df_model["level_idx"].values
-    age_centered = df_model["age_centered"].values
-
-    # Fit the Bayesian hierarchical model
-    idata = fit_bayesian_hierarchical(
-        df_model, batter_idx, level_idx, age_centered,
-        mu_prior=90, sigma_prior=5,
-        sampler="jax",   #  <-- GPU NUTS
-        draws=1000, tune=1000
+    # 3) Fit the same preprocessor we’ll use downstream
+    #    – this gives us X_mat (unused here), y_train (also unused),
+    #      and the ColumnTransformer we must pass to our PyMC model.
+    _, _, transformer = fit_preprocessor(
+        df_model,
+        model_type="linear",  # or whichever you prefer
+        debug=True            # helpful to see its internals
     )
 
+    # 4) Extract the index arrays for random‐effects
+    batter_idx = df_model["batter_id"].cat.codes.values
+    level_idx  = df_model["level_idx"].values
+
+    # 5) Quick smoke-run of the Bayes hierarchy
+    idata = fit_bayesian_hierarchical(
+        df_model,
+        transformer,
+        batter_idx,
+        level_idx,
+        sampler="jax",   # use GPU‐accelerated Nuts
+        draws=5,
+        tune=5,
+    )
     print(idata)
 
-
-
+    # 6) Save & reload roundtrip
+    save_model(idata, MODEL_PATH)
+    _ = load_model(MODEL_PATH)

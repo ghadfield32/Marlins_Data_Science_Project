@@ -37,69 +37,23 @@ def fit_mixed(train: pd.DataFrame,
     rmse = np.sqrt(np.mean((pred - true) ** 2))
     return mdl, rmse
 
-
-# ───────────────────────────────────────────────────────────────────────
-# 6. Smoke test (only run when module executed directly)
-# ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    from pathlib import Path
     from src.data.load_data import load_raw
     from src.features.feature_engineering import feature_engineer
+    from src.features.preprocess import prepare_for_mixed_and_hierarchical
+    from sklearn.model_selection import train_test_split
 
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
     df = load_raw(raw_path)
-    print(df.head())
-    print(df.columns)
-
-    # --- inspect nulls in the raw data ---
-    null_counts = df.isnull().sum()
-    null_counts = null_counts[null_counts > 0]
-    if null_counts.empty:
-        print("✅  No missing values in raw data.")
-    else:
-        print("=== Raw data null counts ===")
-        for col, cnt in null_counts.items():
-            print(f" • {col!r}: {cnt} missing")
     df_fe = feature_engineer(df)
 
-    print("Raw →", df.shape, "//  Feature‑engineered →", df_fe.shape)
-    print(df_fe.head())
+    # Prepare and split
+    df_model = prepare_for_mixed_and_hierarchical(df_fe)
+    train_df, test_df = train_test_split(df_model, test_size=0.2, random_state=42)
+ 
+    # Fit mixed-effects
+    mixed_model, rmse_mixed = fit_mixed(train_df, test_df)
+    print(f"Mixed-effects model RMSE: {rmse_mixed:.4f}")
 
-    # singleton instance people can import as `cols`
-    cols = _ColumnSchema()
-
-    __all__ = ["cols"]
-    print("ID columns:         ", cols.id())
-    print("Ordinal columns:    ", cols.ordinal())
-    print("Nominal columns:    ", cols.nominal())
-    print("All categorical:    ", cols.categorical())
-    print("Numerical columns:  ", cols.numerical())
-    print("Model features:     ", cols.model_features())
-    print("Target columns:  ", cols.target())
-    print("All raw columns:    ", cols.all_raw())
-    numericals = cols.numerical()
-    # use list‐comprehension to drop target(s) from numerical features
-    numericals_without_y = [c for c in numericals if c not in cols.target()]
-
-    summary_df = summarize_categorical_missingness(df_fe)
-    print(summary_df.to_markdown(index=False))
-
-
-    # check nulls
-    print("🛠️  Nulls in X before fit_transform:")
-    null_counts = df_fe.isnull().sum()
-    null_counts = null_counts[null_counts > 0]
-    if null_counts.empty:
-        print("✅  No missing values after feature engineering.")
-    else:
-        print("=== Null counts post-engineering ===")
-        print(null_counts)
-
-    train_df, test_df = train_test_split(df_fe, test_size=0.2, random_state=42)
-
-    # run with debug prints
-    X_train, y_train, tf = fit_preprocessor(train_df, model_type='linear', debug=True)
-    X_test,  y_test      = transform_preprocessor(test_df, tf)
-
-
-    print("Processed shapes:", X_train.shape, X_test.shape)
+    # In the smoke test section: P-Value Checks for Mixed-Effects Models
+    print("Mixed-effects model summary:\n", mixed_model.summary())

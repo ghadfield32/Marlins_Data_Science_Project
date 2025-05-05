@@ -33,7 +33,7 @@ def get_column_groups() -> dict:
 def check_nulls(df: pd.DataFrame):
     # Identify columns with null values
     null_columns = df.columns[df.isnull().any()].tolist()
-
+    
     # Output the columns with null values
     if null_columns:
         print("Columns with null values:", null_columns)
@@ -88,12 +88,12 @@ def quick_pulse_check(
         n_batters,
         overall_med,
     ]
-
+    
     # Add level-specific metrics
     for lvl in med_by_level.index:
         metrics.append(f"Median EV @ {lvl}")
         values.append(med_by_level[lvl])
-
+    
     # Add batter event metrics
     metrics.extend([
         "Events per batter (25th pct)",
@@ -103,12 +103,12 @@ def quick_pulse_check(
         ev_stats.get(0.25, "N/A"),
         ev_stats.get(0.5, "N/A"),
     ])
-
+    
     # Add season distribution
     for season_count, count in seasons_stats.items():
         metrics.append(f"Batters with {season_count} season(s)")
         values.append(count)
-
+    
     # Add correlations
     metrics.extend([
         "ρ(exit_velo, launch_angle)",
@@ -123,7 +123,7 @@ def quick_pulse_check(
         "Metric": metrics,
         "Value": values
     })
-
+    
     print(table.to_string(index=False))
     return table
 
@@ -156,7 +156,7 @@ def red_flag_level_effect(df: pd.DataFrame,
         summary = df.groupby(level_col)[velo_col].agg(['mean', 'std', 'count'])
         print(summary)
         return None, None
-
+    
     groups = [
         df[df[level_col] == lvl][velo_col].dropna()
         for lvl in df[level_col].unique()
@@ -164,6 +164,34 @@ def red_flag_level_effect(df: pd.DataFrame,
     F, p = stats.f_oneway(*groups)
     print(f"> ANOVA on {velo_col} by {level_col}: F={F:.3f}, p={p:.3e}")
     return F, p
+
+
+# ------------------------------------------------------------------
+#  REPLACE old red_flag_level_effect  → clearer name & doc
+# ------------------------------------------------------------------
+def league_level_effect(
+    df: pd.DataFrame,
+    level_col: str = "level_abbr",
+    velo_col: str = "exit_velo",
+) -> tuple[float | None, float | None]:
+    """
+    🔹 Why it matters – confirms MLB vs Triple‑A (etc.) differences to
+      justify hierarchical level effects in the model.
+
+    One‑way ANOVA of `exit_velo` across `level_col`.
+    Returns (F, p) or (None, None) if SciPy unavailable.
+    """
+    if not _HAS_STATS_LIBS:
+        print("> SciPy unavailable – falling back to group summary")
+        print(df.groupby(level_col)[velo_col].describe())
+        return None, None
+
+    groups = [df[df[level_col] == lv][velo_col].dropna()
+              for lv in df[level_col].unique()]
+    f_val, p_val = stats.f_oneway(*groups)
+    print(f"> Level effect ANOVA: F={f_val:.3f}, p={p_val:.3e}")
+    return f_val, p_val
+
 
 
 def diag_age_effect(df: pd.DataFrame,
@@ -179,10 +207,10 @@ def diag_age_effect(df: pd.DataFrame,
         corr = df[[age_col, velo_col]].corr().iloc[0, 1]
         print(f"Correlation between {age_col} and {velo_col}: {corr:.3f}")
         return None
-
+    
     # Run LOWESS smoothing
     smooth_result = lowess(df[velo_col], df[age_col])
-
+    
     # Plot the result
     plt.figure(figsize=(6, 3))
     plt.scatter(df[age_col], df[velo_col], alpha=0.1, s=1, color='gray')
@@ -198,7 +226,7 @@ def diag_age_effect(df: pd.DataFrame,
     plt.title("Age effect (LOWESS)")
     plt.legend()
     plt.tight_layout()
-
+    
     return smooth_result
 
 
@@ -215,7 +243,7 @@ def diag_time_series_dw(
     if not _HAS_STATS_LIBS:
         print("> Time series analysis: statsmodels not available")
         return None
-
+    
     # Create pivot table of seasons (columns) by batters (rows)
     pivot = (
         df
@@ -223,13 +251,13 @@ def diag_time_series_dw(
         .mean()
         .unstack(fill_value=np.nan)
     )
-
+    
     # Only process batters with at least 3 seasons
     valid_batters = pivot.dropna(thresh=3).index
     if len(valid_batters) == 0:
         print("> No batters with sufficient seasons for Durbin-Watson test")
         return None
-
+    
     # Calculate DW statistic for each valid batter
     dw_stats = {}
     for batter in valid_batters:
@@ -237,7 +265,7 @@ def diag_time_series_dw(
         if len(series) >= 3:  # Recheck after dropna
             dw = durbin_watson(series)
             dw_stats[batter] = dw
-
+    
     dw_series = pd.Series(dw_stats)
     print(
         f"> Mean Durbin–Watson across {len(dw_series)} batters: "
@@ -246,8 +274,42 @@ def diag_time_series_dw(
     print("> DW < 1.5 suggests positive autocorrelation")
     print("> DW > 2.5 suggests negative autocorrelation")
     print("> DW ≈ 2.0 suggests no autocorrelation")
-
+    
     return dw_series
+
+
+# ------------------------------------------------------------------
+#  REPLACE old diag_time_series_dw WITH optional helper
+# ------------------------------------------------------------------
+def _optional_dw_check(
+    df: pd.DataFrame,
+    time_col: str = "season",
+    group_col: str = "batter_id",
+    velo_col: str = "exit_velo",
+) -> pd.Series | None:
+    """
+    (OPTIONAL) Durbin–Watson residual autocorrelation **per batter**.
+    Mostly irrelevant for cross‑sectional EV analysis but retained
+    behind a private name for power users.
+    """
+    if not _HAS_STATS_LIBS:
+        return None
+    pivot = (
+        df.groupby([group_col, time_col])[velo_col]
+          .mean().unstack()
+    )
+    stats_out = {}
+    for idx, row in pivot.dropna(thresh=3).iterrows():
+        if row.count() >= 3:
+            stats_out[idx] = durbin_watson(row.dropna())
+    if not stats_out:
+        print("> DW check: no eligible batters")
+        return None
+    s = pd.Series(stats_out)
+    print(f"DW mean={s.mean():.2f} (1.5<→pos autocorr, >2.5→neg)")
+    return s
+
+
 
 
 def check_red_flags(df: pd.DataFrame, 
@@ -256,18 +318,18 @@ def check_red_flags(df: pd.DataFrame,
     Run all red flag checks and return the results in a dictionary.
     """
     results = {}
-
+    
     # Check for small sample sizes
     small_samples = red_flag_small_samples(df, threshold=sample_threshold)
     results['small_samples'] = small_samples
-
+    
     # Check for level effects
     f_stat, p_val = red_flag_level_effect(df)
     results['level_effect'] = {
         'f_statistic': f_stat,
         'p_value': p_val
     }
-
+    
     return results
 
 
@@ -547,6 +609,145 @@ def hypothesis_test(df, feature, target="exit_velo", test_type="anova"):
         return t, p
 
 
+# ------------------------------------------------------------------
+#  NEW: robust outlier flagging
+# ------------------------------------------------------------------
+def flag_outliers_iqr(
+    df: pd.DataFrame,
+    velo_col: str = "exit_velo",
+    iqr_mult: float = 1.5,
+) -> pd.Series:
+    """
+    🔹 Why it matters – extreme EVs (>120 mph or <40 mph) can distort
+      skew / variance estimates used in hierarchical priors.
+
+    Returns a boolean Series (True = *suspect* outlier) using the
+    classic IQR rule: value < Q1 − k·IQR  or  > Q3 + k·IQR.
+    """
+    q1, q3 = df[velo_col].quantile([0.25, 0.75])
+    iqr = q3 - q1
+    lower, upper = q1 - iqr_mult * iqr, q3 + iqr_mult * iqr
+    mask = (df[velo_col] < lower) | (df[velo_col] > upper)
+    n = int(mask.sum())
+    print(f"> Outlier flag ({velo_col}): {n} rows outside [{lower:.1f}, {upper:.1f}]")
+    return mask
+
+
+
+# ------------------------------------------------------------------
+#  NEW: EV distribution summary + QQ plot
+# ------------------------------------------------------------------
+def ev_distribution_summary(
+    df: pd.DataFrame,
+    velo_col: str = "exit_velo",
+    bins: int = 40,
+):
+    """
+    🔹 Why it matters – confirms right‑skew & heavy‑tail nature of EV
+      so you can choose a skew‑normal or Student‑t likelihood.
+
+    Prints skew/kurtosis, shows histogram, KDE, CDF & QQ (if scipy).
+    """
+    data = df[velo_col].dropna()
+    print(
+        f"Skewness = {stats.skew(data):.2f},  "
+        f"Kurtosis = {stats.kurtosis(data, fisher=False):.2f}"
+    )
+    fig, ax = plt.subplots(1, 3, figsize=(12, 3))
+    ax[0].hist(data, bins=bins, density=True, alpha=0.7)
+    data.plot(kind="kde", ax=ax[0], linewidth=2)
+    ax[0].set_title("Histogram & KDE")
+
+    # empirical CDF
+    ecdf_x = np.sort(data)
+    ecdf_y = np.arange(1, len(ecdf_x) + 1) / len(ecdf_x)
+    ax[1].plot(ecdf_x, ecdf_y)
+    ax[1].set_title("Empirical CDF")
+
+    # QQ vs normal
+    from scipy import stats as _st
+    _st.probplot(data, dist="norm", plot=ax[2])
+    ax[2].set_title("QQ‑plot vs Normal")
+    plt.tight_layout()
+    return fig
+
+
+# ------------------------------------------------------------------
+#  NEW: Year/era trend diagnostic
+# ------------------------------------------------------------------
+def year_trend_ev(
+    df: pd.DataFrame,
+    season_col: str = "season",
+    velo_col: str = "exit_velo",
+    ci: bool = True,
+):
+    """
+    🔹 Why it matters – detects ball‑era shifts (e.g. 2019 “juiced”,
+      2021 “deadened”) so forecasts for 2024 use correct baseline.
+
+    Produces a table & line plot of mean/median EV per season.
+    """
+    g = df.groupby(season_col)[velo_col]
+    stats_df = g.agg(mean="mean", median="median", n="count")
+    print("\n=== Exit‑velo by season ===")
+    print(stats_df)
+
+    fig, ax = plt.subplots(figsize=(7, 3))
+    stats_df["mean"].plot(ax=ax, marker="o", label="Mean EV")
+    stats_df["median"].plot(ax=ax, marker="s", label="Median EV")
+    if ci:
+        sem = g.sem()
+        ax.fill_between(
+            stats_df.index,
+            stats_df["mean"] - 1.96 * sem,
+            stats_df["mean"] + 1.96 * sem,
+            alpha=0.2,
+            label="95% CI (mean)"
+        )
+    ax.set_ylabel(velo_col)
+    ax.set_title("Seasonal trend in exit velocity")
+    ax.legend()
+    plt.tight_layout()
+    return stats_df, fig
+
+
+
+# ------------------------------------------------------------------
+#  REPLACE old red_flag_level_effect  → clearer name & doc
+# ------------------------------------------------------------------
+def league_level_effect(
+    df: pd.DataFrame,
+    level_col: str = "level_abbr",
+    velo_col: str = "exit_velo",
+) -> tuple[float | None, float | None]:
+    """
+    🔹 Why it matters – confirms MLB vs Triple‑A (etc.) differences to
+      justify hierarchical level effects in the model.
+
+    One‑way ANOVA of `exit_velo` across `level_col`.
+    Returns (F, p) or (None, None) if SciPy unavailable.
+    """
+    if not _HAS_STATS_LIBS:
+        print("> SciPy unavailable – falling back to group summary")
+        print(df.groupby(level_col)[velo_col].describe())
+        return None, None
+
+    groups = [df[df[level_col] == lv][velo_col].dropna()
+              for lv in df[level_col].unique()]
+    f_val, p_val = stats.f_oneway(*groups)
+    print(f"> Level effect ANOVA: F={f_val:.3f}, p={p_val:.3e}")
+    return f_val, p_val
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     from pathlib import Path
     from src.data.load_data import load_raw
@@ -594,23 +795,23 @@ if __name__ == "__main__":
         df, percentile=0.05, min_count=15, filter_df=False
     )
 
-
+    
     # Example usage
     print("\n===== NULLS CHECK =====")
     check_nulls(df_fe)
-
+    
     print("\n===== QUICK PULSE CHECK =====")
     quick_pulse_check(df_fe)
-
+    
     print("\n===== RED FLAGS CHECK =====")
     check_red_flags(df_fe)
-
+    
     print("\n===== AGE EFFECT ANALYSIS =====")
     diag_age_effect(df_fe, age_col="age")
-
+    
     print("\n===== TIME SERIES ANALYSIS =====")
     diag_time_series_dw(df_fe)
-
+    
     print("\n===== PLOTTING =====")
     fig1 = plot_distributions(df_fe, by="hit_type")
     fig2 = plot_correlations(df_fe, numericals)  # Using cols schema
@@ -627,3 +828,10 @@ if __name__ == "__main__":
 
     # Example: Test if age has significant effect
     hypothesis_test(df_fe, feature="age_bin", test_type="anova")
+    
+    
+    league_level_effect(df_fe)
+    year_trend_ev(df_fe)
+    flag_outliers_iqr(df_fe)
+    ev_distribution_summary(df_fe)
+# _optional_dw_check(df_fe)   # only if you still care

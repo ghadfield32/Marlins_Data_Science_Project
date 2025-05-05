@@ -138,6 +138,7 @@ if __name__ == "__main__":
     from src.features.preprocess import prepare_for_mixed_and_hierarchical
 
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
+    predict_path = "data/Research Data Project/Research Data Project/exit_velo_validate_data.csv.csv"
     df = load_raw(raw_path)
     df_fe = feature_engineer(df)
 
@@ -158,9 +159,9 @@ if __name__ == "__main__":
     )
 
     print(idata)
-
+    
     posterior_predictive_check(idata, df_model, df_model.batter_id.cat.codes.values)
-
+    
     # For Bayesian model:
     lower, upper = prediction_interval(idata, test_df, method='bayesian')
     print(f"Bayesian 95% Prediction Interval: {lower.mean():.2f}–{upper.mean():.2f} mph")

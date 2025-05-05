@@ -4,7 +4,7 @@ import pandas as pd
 def load_raw(path='data/Research Data Project/Research Data Project/exit_velo_project_data.csv'):
     """
     Load raw exit velocity data from the data directory.
-
+    
     Returns:
         pd.DataFrame: Raw exit velocity data
     """
@@ -30,4 +30,4 @@ if __name__ == "__main__":
         print("=== Raw data null counts ===")
         for col, cnt in null_counts.items():
             print(f" • {col!r}: {cnt} missing")
-
+    
