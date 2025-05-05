@@ -1,9 +1,8 @@
-# src/features/eda.py
 
 import pandas as pd  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np  # type: ignore
-from src.features.feature_selection import cols
+from src.data.ColumnSchema import _ColumnSchema
 
 # Optional imports with fallbacks for advanced statistics
 try:
@@ -20,6 +19,9 @@ except ImportError:
     print("Warning: scipy or statsmodels not available. "
           "Some diagnostics will be limited.")
 
+from scipy.stats import f_oneway, ttest_ind
+
+
 
 def get_column_groups() -> dict:
     """
@@ -27,6 +29,16 @@ def get_column_groups() -> dict:
     based on the canonical schema in src.features.feature_selection.cols.
     """
     return cols.as_dict()
+
+def check_nulls(df: pd.DataFrame):
+    # Identify columns with null values
+    null_columns = df.columns[df.isnull().any()].tolist()
+
+    # Output the columns with null values
+    if null_columns:
+        print("Columns with null values:", null_columns)
+    else:
+        print("No columns with null values.")
 
 
 def quick_pulse_check(
@@ -320,26 +332,298 @@ def plot_time_trends(df: pd.DataFrame,
     return fig
 
 
+def summarize_numeric_vs_target(
+    df: pd.DataFrame,
+    numeric_cols: list[str] | None = None,
+    target_col: str = "exit_velo",
+) -> pd.DataFrame:
+    """
+    Summarise each numeric predictor against the target.
+
+    Returns a DataFrame indexed by feature with:
+      n          – number of non‑null pairs
+      pearson_r  – Pearson correlation coefficient
+    """
+    # --- Pull fresh lists from the schema every time -----------------
+    groups = cols.as_dict()
+
+    if numeric_cols is None:
+        numeric_cols = groups.get("numerical", [])
+
+    # --- Clean the list ---------------------------------------------
+    numeric_cols = [
+        c for c in numeric_cols
+        if c != target_col and c in df.columns      # ❶ exclude target, ❷ guard
+    ]
+
+    records = []
+    for col in numeric_cols:
+        sub = df[[col, target_col]].dropna()
+        if sub.empty:               # skip columns that are all‑NA
+            continue
+        r = sub[col].corr(sub[target_col])
+        records.append({"feature": col, "n": len(sub), "pearson_r": r})
+
+    result = (
+        pd.DataFrame.from_records(records)
+        .set_index("feature")
+        .sort_values("pearson_r", ascending=False)
+    )
+
+    print("\n=== Numeric vs target correlations ===")
+    print(result)
+
+    return result
+
+
+def plot_numeric_vs_target(
+    df: pd.DataFrame,
+    numeric_cols: list[str] | None = None,
+    target_col: str = "exit_velo",
+):
+    """
+    Scatter plots of each numeric predictor vs the target with r‑value in title.
+    """
+    summary = summarize_numeric_vs_target(df, numeric_cols, target_col)
+    for feature, row in summary.iterrows():
+        plt.figure(figsize=(6, 4))
+        plt.scatter(
+            df[feature], df[target_col],
+            alpha=0.3, s=5, edgecolors="none"
+        )
+        plt.title(f"{feature} vs {target_col}  (r = {row['pearson_r']:.2f})")
+        plt.xlabel(feature)
+        plt.ylabel(target_col)
+        plt.tight_layout()
+        plt.show()
+
+
+
+def summarize_categorical_vs_target(
+    df: pd.DataFrame,
+    cat_cols: list[str] | None = None,
+    target_col: str = "exit_velo"
+) -> dict[str, pd.DataFrame]:
+    """
+    For each categorical feature, returns a DataFrame of:
+      count, mean, median, std of the target by category.
+    """
+    groups = get_column_groups()
+    if cat_cols is None:
+        cat_cols = groups.get("categorical", [])
+
+    summaries: dict[str, pd.DataFrame] = {}
+    for col in cat_cols:
+        stats = (
+            df
+            .groupby(col)[target_col]
+            .agg(count="count", mean="mean", median="median", std="std")
+            .sort_values("count", ascending=False)
+        )
+        print(f"\n=== {col} vs {target_col} summary ===")
+        print(stats)
+        summaries[col] = stats
+    return summaries
+
+
+def plot_categorical_vs_target(
+    df: pd.DataFrame,
+    cat_cols: list[str] | None = None,
+    target_col: str = "exit_velo"
+):
+    """
+    For each categorical feature, draw a box‑plot of the target by category.
+    """
+    groups = get_column_groups()
+    if cat_cols is None:
+        cat_cols = groups.get("categorical", [])
+
+    for col in cat_cols:
+        plt.figure(figsize=(6, 4))
+        df.boxplot(column=target_col, by=col, vert=False,
+                   grid=False, patch_artist=True)
+        plt.title(f"{target_col} by {col}")
+        plt.suptitle("")           # remove pandas' automatic suptitle
+        plt.xlabel(target_col)
+        plt.tight_layout()
+        plt.show()
+
+
+
+def examine_and_filter_by_sample_size(
+    df: pd.DataFrame,
+    count_col: str = "exit_velo",
+    group_col: str = "batter_id",
+    season_col: str = "season",
+    percentile: float = 0.05,
+    min_count: int | None = None,
+    filter_df: bool = False,
+) -> tuple[dict[int, pd.DataFrame], pd.DataFrame | None]:
+    """
+    For each season:
+      - compute per-batter count, mean, std of `count_col`
+      - pick cutoff: min_count if provided, else the `percentile` quantile
+      - print diagnostics
+      - plot histograms *safely* (drops NaNs first)
+    Returns:
+      - summaries: dict season → per-batter summary DataFrame
+      - filtered_df: if filter_df, the original df filtered to batters ≥ cutoff
+    """
+    summaries: dict[int, pd.DataFrame] = {}
+    mask_keep: list[pd.Series] = []
+
+    for season, sub in df.groupby(season_col):
+        # 1) per-batter summary (count *non-NA* exit_velo)
+        summary = (
+            sub
+            .groupby(group_col)[count_col]
+            .agg(count="count", mean="mean", std="std")
+            .sort_values("count")
+        )
+        summaries[season] = summary
+
+        # 2) determine cutoff
+        cutoff = min_count if min_count is not None else int(summary["count"].quantile(percentile))
+        small = summary[summary["count"] < cutoff]
+        large = summary[summary["count"] >= cutoff]
+
+        # 3) diagnostics
+        print(f"\n=== Season {season} (cutoff = {cutoff}) ===")
+        print(f"  small (<{cutoff} events): {len(small)} batters")
+        print(small[["count","mean","std"]].describe(), "\n")
+        print(f"  large (≥{cutoff} events): {len(large)} batters")
+        print(large[["count","mean","std"]].describe())
+
+        # 4) **safe plotting**: drop NaNs, skip if nothing to plot
+        small_means = small["mean"].dropna()
+        large_means = large["mean"].dropna()
+
+        if small_means.empty and large_means.empty:
+            print(f"  ⚠️  Season {season}: no valid per-batter means to plot")
+        else:
+            plt.figure(figsize=(8, 3))
+            if not small_means.empty:
+                plt.hist(small_means, bins=30, alpha=0.6, label=f"n<{cutoff}")
+            if not large_means.empty:
+                plt.hist(large_means, bins=30, alpha=0.6, label=f"n≥{cutoff}")
+            plt.title(f"Season {season}: per-batter EV means")
+            plt.xlabel("Mean exit_velo")
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
+
+        # 5) build mask to keep only large-sample batters
+        if filter_df:
+            keep_ids = large.index
+            mask_keep.append(
+                (df[season_col] == season) &
+                (df[group_col].isin(keep_ids))
+            )
+
+    # 6) combine masks and filter
+    filtered_df = None
+    if filter_df and mask_keep:
+        combined = pd.concat(mask_keep, axis=1).any(axis=1)
+        filtered_df = df[combined].copy()
+
+    return summaries, filtered_df
+
+
+
+def hypothesis_test(df, feature, target="exit_velo", test_type="anova"):
+    """
+    Perform hypothesis tests for feature significance.
+    """
+    if test_type == "anova":
+        groups = [df[df[feature] == cat][target] for cat in df[feature].unique()]
+        F, p = f_oneway(*groups)
+        print(f"ANOVA: F={F:.3f}, p={p:.3e}")
+        return F, p
+    elif test_type == "ttest":
+        group1 = df[df[feature] == 0][target]
+        group2 = df[df[feature] == 1][target]
+        t, p = ttest_ind(group1, group2)
+        print(f"T-test: t={t:.3f}, p={p:.3e}")
+        return t, p
+
+
 if __name__ == "__main__":
+    from pathlib import Path
     from src.data.load_data import load_raw
-    path = 'data/Research Data Project/Research Data Project/exit_velo_project_data.csv'
-    df_train = load_raw(path)
+    from src.features.feature_engineering import feature_engineer
+
+    raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
+    df = load_raw(raw_path)
+    print(df.head())
+    print(df.columns)
+
+    # --- inspect nulls in the raw data ---
+    null_counts = df.isnull().sum()
+    null_counts = null_counts[null_counts > 0]
+    if null_counts.empty:
+        print("✅  No missing values in raw data.")
+    else:
+        print("=== Raw data null counts ===")
+        for col, cnt in null_counts.items():
+            print(f" • {col!r}: {cnt} missing")
+    df_fe = feature_engineer(df)
+
+    print("Raw →", df.shape, "//  Feature‑engineered →", df_fe.shape)
+    print(df_fe.head())
+
+    # singleton instance people can import as `cols`
+    cols = _ColumnSchema()
+
+    __all__ = ["cols"]
+    print("ID columns:         ", cols.id())
+    print("Ordinal columns:    ", cols.ordinal())
+    print("Nominal columns:    ", cols.nominal())
+    print("All categorical:    ", cols.categorical())
+    print("Numerical columns:  ", cols.numerical())
+    print("Model features:     ", cols.model_features())
+    print("Target columns:  ", cols.target())
+    print("All raw columns:    ", cols.all_raw())
+    numericals = cols.numerical()
+    # use list‐comprehension to drop target(s) from numerical features
+    numericals_without_y = [c for c in numericals if c not in cols.target()]
+
+
+    print("\n===== check on small samples =====")
+    summaries, _ = examine_and_filter_by_sample_size(df, percentile=0.05)
+    summaries, df_filtered = examine_and_filter_by_sample_size(
+        df, percentile=0.05, min_count=15, filter_df=False
+    )
+
+
+    # Example usage
+    print("\n===== NULLS CHECK =====")
+    check_nulls(df_fe)
 
     print("\n===== QUICK PULSE CHECK =====")
-    quick_pulse_check(df_train)
+    quick_pulse_check(df_fe)
 
     print("\n===== RED FLAGS CHECK =====")
-    check_red_flags(df_train)
+    check_red_flags(df_fe)
 
     print("\n===== AGE EFFECT ANALYSIS =====")
-    diag_age_effect(df_train, age_col="age")
+    diag_age_effect(df_fe, age_col="age")
 
     print("\n===== TIME SERIES ANALYSIS =====")
-    diag_time_series_dw(df_train)
+    diag_time_series_dw(df_fe)
 
     print("\n===== PLOTTING =====")
-    fig1 = plot_distributions(df_train, by="hit_type")
-    fig2 = plot_correlations(df_train, cols.numerical())  # Using cols schema
-    fig3 = plot_time_trends(df_train, sample=20)
+    fig1 = plot_distributions(df_fe, by="hit_type")
+    fig2 = plot_correlations(df_fe, numericals)  # Using cols schema
+    fig3 = plot_time_trends(df_fe, sample=20)
 
 
+    # — Numeric features —
+    num_summary = summarize_numeric_vs_target(df_fe)
+    plot_numeric_vs_target(df_fe)
+
+    # — Categorical features —
+    cat_summary = summarize_categorical_vs_target(df_fe)
+    plot_categorical_vs_target(df_fe)
+
+    # Example: Test if age has significant effect
+    hypothesis_test(df_fe, feature="age_bin", test_type="anova")

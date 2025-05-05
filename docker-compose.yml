@@ -1,26 +1,24 @@
 services:
-  marlins-jax:
+  datascience:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: marlins-jax:latest
-    container_name: marlins-jax
+      dockerfile: .devcontainer/Dockerfile
+    runtime: nvidia  # Ensure the NVIDIA runtime is used
     volumes:
-      - .:/app
-      - ./data:/app/data
+      - .:/workspace
+    ports:
+      - "8889:8888"  # For Jupyter Notebook
+      - "6006:6006"  # For TensorBoard
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - PYTENSOR_FLAGS=mode=JAX,floatX=float32
-      - XLA_FLAGS=--xla_gpu_force_compilation_parallelism=1
-      - JAX_PLATFORMS=cpu,cuda
-    # Run the GPU test script by default
-    command: python3 gpu_testing/gpu_test.py
-    stdin_open: true
-    tty: true 
+      - ENV_NAME=marlins-ds-gpu
+      - PYTHON_VER=3.10
+    command: ["conda", "run", "-n", "marlins-ds-gpu", "jupyter", "lab", "--ip", "0.0.0.0", "--port", "8888", "--no-browser", "--allow-root"]
+
+    

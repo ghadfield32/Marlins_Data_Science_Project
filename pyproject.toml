@@ -37,6 +37,8 @@ dependencies = [
   "jaxlib==0.6.0",
   "pytensor>=2.18.3",  # explicit version for CUDA support
   "aesara>=2.9.4",     # alternative backend option
+  "tqdm>=4.67.0",
+  "pyarrow>=12.0.0",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,49 @@
+Thought for 4 seconds
+
+
+### 2  Data Preparation & Exploratory Analysis
+
+*(concise write‑up you can drop straight into your report – ≈1½ pages when rendered)*
+
+| **Step**                             | **What we did**                                                                                                                                    | **Why it matters for 2024 EV projection**                                                                                                  | **Key evidence / figure**                                |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| **2.1 Missing‑value audit**          | • 11/33 engineered columns have gaps (notably `exit_velo` ≈ 7.3 %) <br>• Nulls concentrated in raw Statcast measures – see *Table A1* in Appendix. | Confirms imputation strategy must treat target & predictors separately; missing EV rows cannot inform posterior ability.                   | Table A1                                                 |
+| **2.2 Outlier flag (IQR ± 1.5)**     | 25 744 rows (1.9 %) outside 51.2–127.4 mph (🔹 `flag_outliers_iqr`).                                                                               | Heavy tails inflate σ; robust likelihood (Student‑t) or outlier‑down‑weighting is justified.                                               | **Fig 1a** (Histogram + KDE)                             |
+| **2.3 Distribution shape**           | • Skew = −1.06 (slight left‑skew after hard‑hit peak) <br>• Kurtosis = 4.5 (>3) → leptokurtic. <br>• QQ‑plot shows heavy tails vs Normal.          | Guides choice of likelihood: skew‑normal or t‑dist better than Gaussian; improves predictive tails.                                        | **Fig 1a–c**                                             |
+| **2.4 Level (quality) effect**       | One‑way ANOVA: F = 332.5, p < 10⁻¹⁴⁰ (🔹 `league_level_effect`). MLB > AAA > AA medians: 91.24 > 90.62 > 90.45 mph.                                | Necessitates fixed/partial‑pooling “level” term; model must up‑shift minor‑league EVs to MLB baseline.                                     | **Fig 2** (exit‑velo density by level – not shown above) |
+| **2.5 Season/ball‑era drift**        | Mean EV dipped 0.7 mph in 2021 (“deadened” ball) then rebounded (🔹 `year_trend_ev`). Line plot 95 % CI shows trend is significant.                | Add season fixed‑effect or centre training data on 2023 ball characteristics before projecting 2024.                                       | **Fig 1d**                                               |
+| **2.6 Age curve**                    | LOWESS on 1.3 M rows reveals flat peak 24–29 yrs, −0.15 mph/yr decline afterwards (see **Fig 3**).                                                 | Supplies prior slope for age‑term (β\_age ≈ −0.15) and motivates centred‑age feature.                                                      | **Fig 3**                                                |
+| **2.7 Contact‑quality covariates**   | Correlations with EV: `ev_la_sqrt` 0.63, `launch_angle` 0.14, `spray_angle` −0.01 (**Table B1** & **Fig 4**).                                      | Justifies including synthetic combo `√(EV×LA)` to soak nonlinearities; low spray correlation means we can drop it for parsimony.           | **Fig 4 (heat‑map & scatters)**                          |
+| **2.8 Pitcher & sample‑size sanity** | • `pitcher_ev_mean50` correlates 0.17 → competition adjustment term. <br>• 957 batters have < 15 BIP in 2023 (see small‑sample table).             | Inform hierarchical shrinkage strength τ; small‑sample hitters borrow more league information.                                             | **Fig 5** (per‑batter EV histograms by sample size)      |
+| **2.9 Autocorrelation check**        | Durbin–Watson ≈ 0 for 1 208 batters → strong positive AR(1) within player‑season.                                                                  | Optional latent AR(1) could replace independent error assumption, but deemed out‑of‑scope for first‑pass model; documented as future work. | (not included in main paper)                             |
+
+---
+
+#### Narrative summary (to drop beneath the table)
+
+> *The exploratory phase confirms that exit velocity is mildly skewed, heavy‑tailed, level‑dependent, and exhibits measurable year‑to‑year drift driven by ball composition. We therefore specify a skew‑normal partial‑pooling model with fixed effects for competition level and season, a linear age term anchored at age 27, and a contact‑quality spline using `ev_la_sqrt`. Batters with fewer than 15 balls in play receive substantial shrinkage toward the level mean. Outlier‑down‑weighting and t‑distributed residuals protect against the 1.9 % extreme‑EV tail. A future refinement could model within‑batter AR(1) dynamics, as Durbin–Watson diagnostics indicate positive autocorrelation, but this is not critical for one‑year‑ahead projections.*
+
+---
+
+### Figure references
+
+| **ID**   | **Description**                                                                  | *Inline file names you already produced*   |
+| -------- | -------------------------------------------------------------------------------- | ------------------------------------------ |
+| Fig 1a–c | Histogram + KDE, ECDF, QQ‑plot of EV                                             | `e4a6a775-*.png`                           |
+| Fig 1d   | Seasonal mean/median EV with 95 % CI                                             | `5634269a-*.png`                           |
+| Fig 3    | LOWESS age curve                                                                 | `d39db045-*.png`                           |
+| Fig 4    | Correlation heat‑map + exemplar scatter plots (`player_ev_std50`, `spray_angle`) | `f4cd82b8-*.png`, `de4a2d56-*.png`         |
+| Fig 5    | Per‑batter mean EV histograms split by sample threshold                          | `6a69c543-*.png` and similar season panels |
+
+*(Rename files or embed directly in your PDF; ensure captions cite the takeaway bullet in the table above.)*
+
+---
+
+### How to slot this into the final report
+
+1. **Section 2 header:** “Data Preparation & Exploratory Analysis”.
+2. Insert the table first – reviewers instantly see each check tied to a modeling implication.
+3. Follow with the narrative paragraph (≤120 words).
+4. Drop selected figures under sub‑headings (“Distribution shape”, “Seasonal drift”, etc.) with tight captions: *“Fig 1a. EV histogram confirms heavy‑tail; motivates t‑likelihood.”*
+
+That gives you a senior‑level, hypothesis‑driven EDA that is **tight, purposeful, and directly linked to subsequent modeling choices**.

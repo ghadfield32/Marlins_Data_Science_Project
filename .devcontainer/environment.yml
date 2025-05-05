@@ -1,0 +1,63 @@
+name: marlins-ds-gpu
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Core language & kernels
+  - python=3.10
+  - jupyterlab>=3.0.0
+  - ipykernel
+  - ipywidgets>=8.0.0
+
+  # Data & ML libraries (conda)
+  - numpy>=1.20.0
+  - pandas>=1.2.0
+  - scipy>=1.7.0
+  - scikit-learn>=1.4.2
+  - matplotlib>=3.4.0
+  - seaborn>=0.11.0
+  - xgboost>=1.5.0
+  - lightgbm>=3.3.0
+  - catboost>=1.0.0
+
+  # Bayesian & JAX-adjacent (conda)
+  - numpyro>=0.18.0
+  - pymc>=5.0.0
+  - arviz>=0.14.0
+  - statsmodels>=0.13.0
+
+  # Utilities & extras (conda)
+  - nutpie>=0.7.1
+  - tabulate>=0.9.0
+  - tqdm>=4.67.0
+  - pyarrow>=12.0.0
+  - sqlalchemy
+  - mysql-connector-python
+
+  # Development tooling
+  - pytest>=7.0.0
+  - black>=23.0.0
+  - isort>=5.0.0
+  - flake8>=5.0.0
+  - mypy>=1.0.0
+
+  # Ensure pip is present
+  - pip
+
+  # Everything below is installed via pip
+  - pip:
+    # - jax==0.6.0
+    # - jaxlib==0.6.0
+    - "jax[cuda12]==0.6.0" 
+    - cupy-cuda12x>=12.0.0
+    - pytensor>=2.18.3
+    - aesara>=2.9.4
+    - shap>=0.40.0
+    - shapiq>=0.1.0
+    - explainerdashboard>=0.3.0
+    - shapash[report]>=2.3.0
+    - bayesian-optimization
+    - pretty_errors
+    - gdown
+    - invoke>=2.2

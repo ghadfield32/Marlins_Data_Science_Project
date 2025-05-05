@@ -38,7 +38,7 @@ def compute_permutation_importance(
 ) -> pd.DataFrame:
     """
     Compute permutation importances with controlled resource usage.
-
+    
     Parameters
     ----------
     model : estimator
@@ -58,7 +58,7 @@ def compute_permutation_importance(
         Seed for reproducibility.
     verbose : bool
         Print debug info if True.
-
+        
     Returns
     -------
     pd.DataFrame
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     # Use the same index that y carries (only non-bunt, non-NA rows)
     idx = y.index
-
+    
     # turn that into a DataFrame with the same column names:
     feat_names = preproc.get_feature_names_out()
     X = pd.DataFrame(X_np, columns=feat_names, index=idx)
