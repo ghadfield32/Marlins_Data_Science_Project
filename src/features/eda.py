@@ -3,6 +3,8 @@ import pandas as pd  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np  # type: ignore
 from src.data.ColumnSchema import _ColumnSchema
+from pandas.api.types import is_categorical_dtype
+from scipy.stats import f_oneway, ttest_ind
 
 # Optional imports with fallbacks for advanced statistics
 try:
@@ -19,8 +21,6 @@ except ImportError:
     print("Warning: scipy or statsmodels not available. "
           "Some diagnostics will be limited.")
 
-from scipy.stats import f_oneway, ttest_ind
-
 
 
 def get_column_groups() -> dict:
@@ -33,7 +33,7 @@ def get_column_groups() -> dict:
 def check_nulls(df: pd.DataFrame):
     # Identify columns with null values
     null_columns = df.columns[df.isnull().any()].tolist()
-    
+
     # Output the columns with null values
     if null_columns:
         print("Columns with null values:", null_columns)
@@ -88,12 +88,12 @@ def quick_pulse_check(
         n_batters,
         overall_med,
     ]
-    
+
     # Add level-specific metrics
     for lvl in med_by_level.index:
         metrics.append(f"Median EV @ {lvl}")
         values.append(med_by_level[lvl])
-    
+
     # Add batter event metrics
     metrics.extend([
         "Events per batter (25th pct)",
@@ -103,12 +103,12 @@ def quick_pulse_check(
         ev_stats.get(0.25, "N/A"),
         ev_stats.get(0.5, "N/A"),
     ])
-    
+
     # Add season distribution
     for season_count, count in seasons_stats.items():
         metrics.append(f"Batters with {season_count} season(s)")
         values.append(count)
-    
+
     # Add correlations
     metrics.extend([
         "ρ(exit_velo, launch_angle)",
@@ -123,7 +123,7 @@ def quick_pulse_check(
         "Metric": metrics,
         "Value": values
     })
-    
+
     print(table.to_string(index=False))
     return table
 
@@ -156,7 +156,7 @@ def red_flag_level_effect(df: pd.DataFrame,
         summary = df.groupby(level_col)[velo_col].agg(['mean', 'std', 'count'])
         print(summary)
         return None, None
-    
+
     groups = [
         df[df[level_col] == lvl][velo_col].dropna()
         for lvl in df[level_col].unique()
@@ -207,10 +207,10 @@ def diag_age_effect(df: pd.DataFrame,
         corr = df[[age_col, velo_col]].corr().iloc[0, 1]
         print(f"Correlation between {age_col} and {velo_col}: {corr:.3f}")
         return None
-    
+
     # Run LOWESS smoothing
     smooth_result = lowess(df[velo_col], df[age_col])
-    
+
     # Plot the result
     plt.figure(figsize=(6, 3))
     plt.scatter(df[age_col], df[velo_col], alpha=0.1, s=1, color='gray')
@@ -226,7 +226,7 @@ def diag_age_effect(df: pd.DataFrame,
     plt.title("Age effect (LOWESS)")
     plt.legend()
     plt.tight_layout()
-    
+
     return smooth_result
 
 
@@ -243,7 +243,7 @@ def diag_time_series_dw(
     if not _HAS_STATS_LIBS:
         print("> Time series analysis: statsmodels not available")
         return None
-    
+
     # Create pivot table of seasons (columns) by batters (rows)
     pivot = (
         df
@@ -251,13 +251,13 @@ def diag_time_series_dw(
         .mean()
         .unstack(fill_value=np.nan)
     )
-    
+
     # Only process batters with at least 3 seasons
     valid_batters = pivot.dropna(thresh=3).index
     if len(valid_batters) == 0:
         print("> No batters with sufficient seasons for Durbin-Watson test")
         return None
-    
+
     # Calculate DW statistic for each valid batter
     dw_stats = {}
     for batter in valid_batters:
@@ -265,7 +265,7 @@ def diag_time_series_dw(
         if len(series) >= 3:  # Recheck after dropna
             dw = durbin_watson(series)
             dw_stats[batter] = dw
-    
+
     dw_series = pd.Series(dw_stats)
     print(
         f"> Mean Durbin–Watson across {len(dw_series)} batters: "
@@ -274,7 +274,7 @@ def diag_time_series_dw(
     print("> DW < 1.5 suggests positive autocorrelation")
     print("> DW > 2.5 suggests negative autocorrelation")
     print("> DW ≈ 2.0 suggests no autocorrelation")
-    
+
     return dw_series
 
 
@@ -318,18 +318,18 @@ def check_red_flags(df: pd.DataFrame,
     Run all red flag checks and return the results in a dictionary.
     """
     results = {}
-    
+
     # Check for small sample sizes
     small_samples = red_flag_small_samples(df, threshold=sample_threshold)
     results['small_samples'] = small_samples
-    
+
     # Check for level effects
     f_stat, p_val = red_flag_level_effect(df)
     results['level_effect'] = {
         'f_statistic': f_stat,
         'p_value': p_val
     }
-    
+
     return results
 
 
@@ -742,7 +742,39 @@ def league_level_effect(
 
 
 
+# debugs:
+def summarize_categorical_missingness(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each categorical column (ordinal + nominal), compute:
+      - original_null_count / pct
+      - imputed_missing_count / pct
+    Safely handles pandas.Categorical by first adding 'MISSING' to its categories.
+    """
+    cols    = _ColumnSchema()
+    cat_cols = cols.ordinal() + cols.nominal()
+    summary = []
+    n = len(df)
 
+    for col in cat_cols:
+        ser = df[col]
+        orig_null = ser.isna().sum()
+
+        # If it's a Categorical, add 'MISSING' as a valid category
+        if is_categorical_dtype(ser):
+            ser = ser.cat.add_categories(['MISSING'])
+
+        # Count rows that would become 'MISSING'
+        imputed_missing = ser.fillna('MISSING').eq('MISSING').sum()
+
+        summary.append({
+            'column': col,
+            'original_null_count':   orig_null,
+            'original_null_pct':     orig_null / n,
+            'imputed_missing_count': imputed_missing,
+            'imputed_missing_pct':   imputed_missing / n,
+        })
+
+    return pd.DataFrame(summary)
 
 
 
@@ -750,11 +782,11 @@ def league_level_effect(
 
 if __name__ == "__main__":
     from pathlib import Path
-    from src.data.load_data import load_raw
+    from src.data.load_data import load_and_clean_data
     from src.features.feature_engineering import feature_engineer
 
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
-    df = load_raw(raw_path)
+    df = load_and_clean_data(raw_path)
     print(df.head())
     print(df.columns)
 
@@ -767,6 +799,8 @@ if __name__ == "__main__":
         print("=== Raw data null counts ===")
         for col, cnt in null_counts.items():
             print(f" • {col!r}: {cnt} missing")
+
+
     df_fe = feature_engineer(df)
 
     print("Raw →", df.shape, "//  Feature‑engineered →", df_fe.shape)
@@ -782,36 +816,49 @@ if __name__ == "__main__":
     print("All categorical:    ", cols.categorical())
     print("Numerical columns:  ", cols.numerical())
     print("Model features:     ", cols.model_features())
-    print("Target columns:  ", cols.target())
+    print("Target columns:     ", cols.target())
     print("All raw columns:    ", cols.all_raw())
     numericals = cols.numerical()
     # use list‐comprehension to drop target(s) from numerical features
     numericals_without_y = [c for c in numericals if c not in cols.target()]
 
+    # Filter out rows with nulls in the target column(s)
+    target_cols = cols.target()
+    df_filtered = df.dropna(subset=target_cols)
+
+    # Check for nulls in the filtered data
+    null_counts_filtered = df_filtered.isnull().sum()
+    null_counts_filtered = null_counts_filtered[null_counts_filtered > 0]
+    if null_counts_filtered.empty:
+        print("✅  No missing values in filtered data.")
+    else:
+        print("=== Filtered data null counts ===")
+        for col, cnt in null_counts_filtered.items():
+            print(f" • {col!r}: {cnt} missing")
 
     print("\n===== check on small samples =====")
-    summaries, _ = examine_and_filter_by_sample_size(df, percentile=0.05)
+    summaries, _ = examine_and_filter_by_sample_size(df_filtered, percentile=0.05)
     summaries, df_filtered = examine_and_filter_by_sample_size(
-        df, percentile=0.05, min_count=15, filter_df=False
+        df_filtered, percentile=0.05, min_count=15, filter_df=False
     )
 
-    
+
     # Example usage
     print("\n===== NULLS CHECK =====")
     check_nulls(df_fe)
-    
+
     print("\n===== QUICK PULSE CHECK =====")
     quick_pulse_check(df_fe)
-    
+
     print("\n===== RED FLAGS CHECK =====")
     check_red_flags(df_fe)
-    
+
     print("\n===== AGE EFFECT ANALYSIS =====")
     diag_age_effect(df_fe, age_col="age")
-    
+
     print("\n===== TIME SERIES ANALYSIS =====")
     diag_time_series_dw(df_fe)
-    
+
     print("\n===== PLOTTING =====")
     fig1 = plot_distributions(df_fe, by="hit_type")
     fig2 = plot_correlations(df_fe, numericals)  # Using cols schema
@@ -828,10 +875,47 @@ if __name__ == "__main__":
 
     # Example: Test if age has significant effect
     hypothesis_test(df_fe, feature="age_bin", test_type="anova")
-    
-    
+
+
     league_level_effect(df_fe)
     year_trend_ev(df_fe)
     flag_outliers_iqr(df_fe)
     ev_distribution_summary(df_fe)
-# _optional_dw_check(df_fe)   # only if you still care
+    # _optional_dw_check(df_fe)   # only if you still care
+
+
+    summary_df = summarize_categorical_missingness(df_fe)
+    print(summary_df.to_markdown(index=False))
+
+    # uniques of outcome
+    print("outcome uniques:=========================")
+    print(df_fe["outcome"].unique())
+    # uniques of hit_type
+    print("hit_type uniques:=========================")
+    print(df_fe["hit_type"].unique())
+
+
+    # assume df is your feature-engineered DataFrame
+    df = df.copy()
+    # 1) Flag missing hangtime
+    df['hangtime_missing'] = df['hangtime'].isna()
+
+    # 2) Contingency of hit_type vs missingness
+    hit_type_ct = pd.crosstab(
+        df['hit_type'].fillna('UNKNOWN'),
+        df['hangtime_missing'],
+        margins=True,
+        normalize='columns'
+    )
+    print("\nProportion of hit_type when hangtime is missing:")
+    print(hit_type_ct)
+
+    # 3) Contingency of outcome vs missingness
+    outcome_ct = pd.crosstab(
+        df['outcome'].fillna('UNKNOWN'),
+        df['hangtime_missing'],
+        margins=True,
+        normalize='columns'
+    )
+    print("\nProportion of outcome when hangtime is missing:")
+    print(outcome_ct)

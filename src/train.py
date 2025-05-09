@@ -8,7 +8,7 @@ from __future__ import annotations
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.data.load_data import load_raw
+from src.data.load_data import load_and_clean_data
 from src.features.preprocess import preprocess
 
 from src.models.linear import fit_ridge
@@ -20,7 +20,7 @@ RAW_PATH = "data/Research Data Project/Research Data Project/exit_velo_project_d
 
 
 def main():
-    df_raw   = load_raw(RAW_PATH)
+    df_raw   = load_and_clean_data(RAW_PATH)
     df_clean = preprocess(df_raw)
 
     train_df, test_df = train_test_split(

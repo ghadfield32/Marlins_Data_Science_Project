@@ -1,0 +1,17 @@
+# Dockerfile.fix - Add these lines to your Dockerfile to ensure cuDNN compatibility
+
+# Ensure correct cuDNN version for JAX 0.5.x
+RUN apt-get update && \
+    apt-get install -y --allow-downgrades --allow-change-held-packages \
+    libcudnn9=9.1.0* libcudnn9-dev=9.1.0* && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Update environment to handle potential crashes gracefully
+ENV PYTHONFAULTHANDLER=1
+ENV JAX_CRASH_ON_FIRST_ERROR=1 
+ENV XLA_FLAGS="--xla_force_host_platform_device_count=1"
+
+# Add these lines at the end of your Dockerfile to verify cuDNN version matches JAX requirements
+RUN ldconfig -v 2>/dev/null | grep -E "libcudnn.so" && \
+    python -c "import ctypes; print('cuDNN loads:', ctypes.CDLL('libcudnn.so'))" 

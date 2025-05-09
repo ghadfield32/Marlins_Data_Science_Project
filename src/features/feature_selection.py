@@ -6,7 +6,7 @@ from sklearn.inspection import permutation_importance
 import shap
 
 from pathlib import Path
-from src.data.load_data import load_raw
+from src.data.load_data import load_and_clean_data
 from src.features.feature_engineering import feature_engineer
 from src.data.ColumnSchema import _ColumnSchema
 # ── NEW: shapash and shapiq imports
@@ -38,7 +38,7 @@ def compute_permutation_importance(
 ) -> pd.DataFrame:
     """
     Compute permutation importances with controlled resource usage.
-    
+
     Parameters
     ----------
     model : estimator
@@ -58,7 +58,7 @@ def compute_permutation_importance(
         Seed for reproducibility.
     verbose : bool
         Print debug info if True.
-        
+
     Returns
     -------
     pd.DataFrame
@@ -218,7 +218,7 @@ def filter_to_final_features(
 if __name__ == "__main__":
     # --- existing loading & schema logic ---
     raw_path = Path("data/Research Data Project/Research Data Project/exit_velo_project_data.csv")
-    df = load_raw(raw_path)
+    df = load_and_clean_data(raw_path)
     print(df.head())
     print(df.columns)
     null_counts = df.isnull().sum()
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     # Use the same index that y carries (only non-bunt, non-NA rows)
     idx = y.index
-    
+
     # turn that into a DataFrame with the same column names:
     feat_names = preproc.get_feature_names_out()
     X = pd.DataFrame(X_np, columns=feat_names, index=idx)

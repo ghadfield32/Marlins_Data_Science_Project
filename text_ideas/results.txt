@@ -1,8 +1,0 @@
-Ridge regression RMSE: 2.0336
-XGBoost GBM model RMSE: 0.6656
-Mixed-effects model RMSE: 13.8272
-
-
-
-
-
