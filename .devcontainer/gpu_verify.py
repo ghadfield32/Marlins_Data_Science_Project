@@ -1,64 +1,57 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-GPU Verification Script for Docker Container
+Verify that the GPU is accessible and JAX is correctly configured.
+This script is used during container startup.
+"""
 
-This script runs at container startup to verify that:
-1. JAX can access the GPU
-2. Memory settings are properly applied
-3. Basic operations work correctly
-"""
-import os
 import sys
-import time
 
-# First ensure JAX memory settings are applied
-try:
-    # Add the project root to sys.path
-    sys.path.insert(0, '/workspace')
+def check_gpu():
+    print("Checking GPU availability...")
+    try:
+        import jax
+        jax.config.update('jax_platform_name', 'gpu')
+        
+        # Get device count and details
+        devices = jax.devices()
+        device_count = len(devices)
+        print(f"JAX version: {jax.__version__}")
+        print(f"Available devices: {device_count}")
+        
+        for i, device in enumerate(devices):
+            print(f"Device {i}: {device}")
+        
+        if device_count == 0 or 'gpu' not in str(devices[0]).lower():
+            print("WARNING: No GPU devices found by JAX!")
+            return False
+        
+        # Check CUDA configuration
+        import jax.tools.jax_jit
+        jit_info = jax.tools.jax_jit.get_jax_jit_flags()
+        print(f"JIT configuration: {jit_info}")
+        
+        # Run a simple GPU computation
+        print("Running a test computation on GPU...")
+        import numpy as np
+        x = np.ones((1000, 1000))
+        result = jax.numpy.sum(x, axis=0)
+        print(f"Test computation result shape: {result.shape}")
+        
+        print("JAX GPU verification completed successfully!")
+        return True
     
-    # Import our custom memory fix module
-    from src.utils.jax_memory_fix_module import verify_gpu_usage, apply_jax_memory_fix
-    
-    # Apply memory settings - use settings from environment if available
-    fraction = float(os.environ.get("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.9"))
-    preallocate = os.environ.get("XLA_PYTHON_CLIENT_PREALLOCATE", "true").lower() == "true"
-    
-    print(f"\n{'='*80}\nGPU VERIFICATION STARTING\n{'='*80}")
-    print(f"Applying JAX memory settings (fraction={fraction}, preallocate={preallocate})")
-    
-    # Apply the memory settings
-    settings = apply_jax_memory_fix(
-        fraction=fraction,
-        preallocate=preallocate,
-        verbose=True
-    )
-    
-    # Import JAX after settings are applied
-    import jax
-    import jax.numpy as jnp
-    
-    # Print JAX configuration
-    print(f"\nJAX version: {jax.__version__}")
-    print(f"JAX devices: {jax.devices()}")
-    print(f"JAX backend: {jax.lib.xla_bridge.get_backend().platform}")
-    
-    # Run the verification
-    print("\nVerifying GPU usage with a test operation...")
-    result = verify_gpu_usage(minimal_usage=0.1, operation_size=5000, verbose=True)
-    
-    if result.get("success", False):
-        print(f"\n{'='*80}\nGPU VERIFICATION SUCCESS ✓\n{'='*80}")
-        print(f"JAX is configured and using the GPU correctly")
-        if "jax_reported_usage" in result:
-            print(f"JAX reports {result['jax_reported_usage']:.2%} GPU memory used")
-        sys.exit(0)
-    else:
-        print(f"\n{'='*80}\nGPU VERIFICATION FAILED ✗\n{'='*80}")
-        print(f"Error: {result.get('error', 'Unknown error')}")
-        # Don't exit with error to allow container to continue starting
+    except ImportError:
+        print("JAX not found! Make sure JAX is installed with GPU support.")
+        return False
+    except Exception as e:
+        print(f"Error during GPU verification: {e}")
+        return False
+
+if __name__ == "__main__":
+    success = check_gpu()
+    if not success:
+        print("WARNING: GPU verification failed!")
+        # Not exiting with error to allow container to start anyway
         # sys.exit(1)
-except Exception as e:
-    print(f"\n{'='*80}\nGPU VERIFICATION ERROR ✗\n{'='*80}")
-    print(f"Exception: {str(e)}")
-    # Continue execution despite errors
-    # sys.exit(1) 
+    else:
+        sys.exit(0) 

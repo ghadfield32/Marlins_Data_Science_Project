@@ -17,7 +17,7 @@ services:
       - XLA_PYTHON_CLIENT_PREALLOCATE=true
       - XLA_PYTHON_CLIENT_ALLOCATOR=platform
       - XLA_PYTHON_CLIENT_MEM_FRACTION=0.95
-      - XLA_FLAGS=--xla_force_host_platform_device_count=1 --xla_gpu_deterministic_reductions
+      - XLA_FLAGS=--xla_force_host_platform_device_count=1
       - JAX_DISABLE_JIT=false
       - JAX_ENABLE_X64=false
       - TF_FORCE_GPU_ALLOW_GROWTH=false
@@ -28,10 +28,17 @@ services:
       - "8889:8888"  # Jupyter
       - "6006:6006"  # TensorBoard
       - "8050:8050"  # explainerdashboard
+      - "8501:8501"  # streamlit
     command:
       [
         "bash", "-c",
-        "conda run -n marlins-ds-gpu python -m pip install 'notebook>=7.2' && conda run -n marlins-ds-gpu python /workspace/.devcontainer/gpu_verify.py && conda run -n marlins-ds-gpu jupyter lab --ServerApp.crash_info=True --ip 0.0.0.0 --port 8888 --no-browser --allow-root"
+        "conda run -n marlins-ds-gpu python -c \"import pyjags; print('PyJAGS version:', pyjags.__version__)\" && conda run -n marlins-ds-gpu jupyter lab --ServerApp.crash_info=True --ip 0.0.0.0 --port 8888 --no-browser --allow-root"
       ]
+    healthcheck:
+      test: ["CMD", "conda", "run", "-n", "marlins-ds-gpu", "python", "-c", "import pyjags; print('PyJAGS', pyjags.__version__)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
       

@@ -14,35 +14,32 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 # make sure jaxlib's RPATH wins
 ENV LD_LIBRARY_PATH=/opt/conda/envs/${ENV_NAME}/lib:$LD_LIBRARY_PATH
 
-<<<<<<< HEAD
-# 1. Install general system dependencies  ← REPLACE the whole RUN block
-=======
-# 1. Install general system dependencies
->>>>>>> f7bcda13883623051eb0a54cbb41e7015d05d6fe
+# 1. Install system deps (added build tools for PyJAGS)
 RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
+      software-properties-common && \
+    add-apt-repository universe && \
+    apt-get update --fix-missing && \
     apt-get install -y --no-install-recommends \
       wget \
       bzip2 \
       ca-certificates \
-<<<<<<< HEAD
-      # ▸ new ↓ build-time reqs for PyJAGS --------------------
-      pkg-config \
-      libjags-dev \
-      jags \
-      # ▸ your original list ----------------------------------
-=======
-      jags libjags-dev \
->>>>>>> f7bcda13883623051eb0a54cbb41e7015d05d6fe
       apt-transport-https \
       gnupg2 \
       curl \
       git \
       vim \
       python3-pip \
-      python3-dev && \
+      python3-dev \
+      pkg-config \
+      build-essential \
+      autoconf \
+      automake \
+      libtool \
+      m4 \
+      cmake && \
     rm -rf /var/lib/apt/lists/*
 
-<<<<<<< HEAD
 
 
 # ------------------------------------------------------------------------
@@ -65,8 +62,21 @@ RUN sed -i "s/^name: .*/name: $ENV_NAME/" /tmp/environment.yml && \
     conda env create -f /tmp/environment.yml && \
     conda clean -a -y
 
-# 6. Install PyJAGS into the conda environment
-RUN conda run -n $ENV_NAME pip install --no-cache-dir pyjags
+# 6. Install PyJAGS with cstdint header fix
+RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate ${ENV_NAME} && \
+    # Create a simple patch script
+    echo '#!/usr/bin/env python3\nimport os\nos.environ["CPPFLAGS"] = "-include cstdint"\nprint("Installing PyJAGS with cstdint header fix...")\nos.system("CC=x86_64-conda-linux-gnu-cc CXX=x86_64-conda-linux-gnu-c++ pip install --no-build-isolation pyjags==1.3.8")\nprint("PyJAGS installation complete!")' > /tmp/install_pyjags.py && \
+    # Run the install script
+    python /tmp/install_pyjags.py && \
+    # Verify installation
+    python -c "import sys; print('Attempting to import PyJAGS...')" && \
+    python -c "import pyjags; print('PyJAGS OK →', pyjags.__version__)" || \
+    # Fallback: try conda install if pip fails
+    (conda install -c conda-forge -y pyjags=1.3 && \
+    python -c "import pyjags; print('PyJAGS OK (conda) →', pyjags.__version__)") && \
+    # Clean up
+    rm -f /tmp/install_pyjags.py
 
 # 7. Ensure the environment auto-activates
 RUN echo ". $CONDA_DIR/etc/profile.d/conda.sh && conda activate $ENV_NAME" \
@@ -77,7 +87,7 @@ ENV XLA_PYTHON_CLIENT_PREALLOCATE=${JAX_PREALLOCATE}
 ENV XLA_PYTHON_CLIENT_MEM_FRACTION=${JAX_MEM_FRAC}
 ENV XLA_PYTHON_CLIENT_ALLOCATOR=${JAX_ALLOCATOR}
 ENV JAX_PLATFORM_NAME=gpu
-ENV XLA_FLAGS="--xla_force_host_platform_device_count=1 --xla_gpu_deterministic_reductions"
+ENV XLA_FLAGS="--xla_force_host_platform_device_count=1"
 ENV JAX_DISABLE_JIT=false
 ENV JAX_ENABLE_X64=false
 ENV TF_FORCE_GPU_ALLOW_GROWTH=false
@@ -90,55 +100,6 @@ RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
       -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
 # 10. Install IPython kernel for Jupyter
-=======
-# Install PyJAGS into the conda env via pip
-RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
-    conda activate $ENV_NAME && \
-    pip install --no-cache-dir pyjags
-
-# ------------------------------------------------------------------------
-# The base image already provides:
-#   * CUDA 12.3 repo key + sources
-#   * cuDNN 9.1.1 runtime & dev headers
-# so no extra repository or libcudnn install is necessary.
-# ------------------------------------------------------------------------
-
-# 4. Miniconda installation
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
-    /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
-    rm ~/miniconda.sh && \
-    conda clean -a -y
-
-# 5. Create the conda environment
-COPY .devcontainer/environment.yml /tmp/environment.yml
-RUN sed -i "s/^name: .*/name: $ENV_NAME/" /tmp/environment.yml && \
-    sed -i "s/^- python=.*/- python=$PYTHON_VER/" /tmp/environment.yml && \
-    conda env create -f /tmp/environment.yml && \
-    conda clean -a -y
-
-# 6. Ensure the environment auto-activates
-RUN echo ". $CONDA_DIR/etc/profile.d/conda.sh && conda activate $ENV_NAME" \
-      >> /etc/bash.bashrc
-
-# 7. Tune JAX GPU behavior - set all environment variables from the memory fix module
-ENV XLA_PYTHON_CLIENT_PREALLOCATE=${JAX_PREALLOCATE}
-ENV XLA_PYTHON_CLIENT_MEM_FRACTION=${JAX_MEM_FRAC}
-ENV XLA_PYTHON_CLIENT_ALLOCATOR=${JAX_ALLOCATOR}
-ENV JAX_PLATFORM_NAME=gpu
-ENV XLA_FLAGS="--xla_force_host_platform_device_count=1 --xla_gpu_deterministic_reductions"
-ENV JAX_DISABLE_JIT=false
-ENV JAX_ENABLE_X64=false
-ENV TF_FORCE_GPU_ALLOW_GROWTH=false
-ENV JAX_PREALLOCATION_SIZE_LIMIT_BYTES=${JAX_PREALLOC_LIMIT}
-
-# 8. Install JAX CUDA-enabled wheel
-RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
-    conda activate $ENV_NAME && \
-    pip install --no-cache-dir --upgrade "jax[cuda12]==0.5.2" \
-      -f https://storage.googleapis.com/jax-releases/jax_releases.html
-
-# 9. Install IPython kernel for Jupyter
->>>>>>> f7bcda13883623051eb0a54cbb41e7015d05d6fe
 RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
     conda activate ${ENV_NAME} && \
     python -m ipykernel install --name ${ENV_NAME} \
@@ -147,11 +108,7 @@ RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
 WORKDIR /workspace
 CMD ["/bin/bash"]
 
-<<<<<<< HEAD
 # 11. Deduplicate LD_LIBRARY_PATH on shell startup
-=======
-# 10. Deduplicate LD_LIBRARY_PATH on shell startup
->>>>>>> f7bcda13883623051eb0a54cbb41e7015d05d6fe
 RUN echo 'export LD_LIBRARY_PATH=$(printf "%s" "$LD_LIBRARY_PATH" \
     | tr ":" "\n" | awk "!seen[$0]++" | paste -sd ":")' \
     >> /etc/profile.d/clean_ld.sh
