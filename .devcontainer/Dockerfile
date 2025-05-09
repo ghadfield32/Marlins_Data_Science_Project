@@ -1,46 +1,95 @@
-# .devcontainer/Dockerfile  ─────────────────────────────────────────────
+# .devcontainer/Dockerfile
 FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
 
 ARG ENV_NAME=marlins-ds-gpu
 ARG PYTHON_VER=3.10
+ARG JAX_PREALLOCATE=true
+ARG JAX_MEM_FRAC=0.95
+ARG JAX_ALLOCATOR=platform
+ARG JAX_PREALLOC_LIMIT=8589934592
+
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CONDA_DIR=/opt/conda
 ENV PATH=$CONDA_DIR/bin:$PATH
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+# make sure jaxlib's RPATH wins
+ENV LD_LIBRARY_PATH=/opt/conda/envs/${ENV_NAME}/lib:$LD_LIBRARY_PATH
 
-# System deps
-RUN apt-get update --fix-missing && apt-get install -y \
-    wget bzip2 ca-certificates curl git vim python3-pip python3-dev \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+# 1. Install general system dependencies  ← REPLACE the whole RUN block
+RUN apt-get update --fix-missing && \
+    apt-get install -y --no-install-recommends \
+      wget \
+      bzip2 \
+      ca-certificates \
+      # ▸ new ↓ build-time reqs for PyJAGS --------------------
+      pkg-config \
+      libjags-dev \
+      jags \
+      # ▸ your original list ----------------------------------
+      apt-transport-https \
+      gnupg2 \
+      curl \
+      git \
+      vim \
+      python3-pip \
+      python3-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Miniconda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh \
- && /bin/bash ~/miniconda.sh -b -p /opt/conda \
- && rm ~/miniconda.sh \
- && $CONDA_DIR/bin/conda clean -a -y
 
-# Conda env
+
+# ------------------------------------------------------------------------
+# The base image already provides:
+#   * CUDA 12.3 repo key + sources
+#   * cuDNN 9.1.1 runtime & dev headers
+# so no extra repository or libcudnn install is necessary.
+# ------------------------------------------------------------------------
+
+# 4. Miniconda installation
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
+    rm ~/miniconda.sh && \
+    conda clean -a -y
+
+# 5. Create the conda environment
 COPY .devcontainer/environment.yml /tmp/environment.yml
-RUN sed -i "s/name: .*/name: $ENV_NAME/" /tmp/environment.yml \
- && sed -i "s/- python=.*/- python=$PYTHON_VER/" /tmp/environment.yml \
- && conda env create -f /tmp/environment.yml \
- && conda clean -a -y
+RUN sed -i "s/^name: .*/name: $ENV_NAME/" /tmp/environment.yml && \
+    sed -i "s/^- python=.*/- python=$PYTHON_VER/" /tmp/environment.yml && \
+    conda env create -f /tmp/environment.yml && \
+    conda clean -a -y
 
-# Activate on shell start
-RUN echo ". /opt/conda/etc/profile.d/conda.sh && conda activate $ENV_NAME" >> /etc/bash.bashrc
+# 6. Install PyJAGS into the conda environment
+RUN conda run -n $ENV_NAME pip install --no-cache-dir pyjags
 
-# ── JAX + CUDA plugin ─────────────────────────────────────────────
-RUN /bin/bash -c "\
-    . /opt/conda/etc/profile.d/conda.sh && \
+# 7. Ensure the environment auto-activates
+RUN echo ". $CONDA_DIR/etc/profile.d/conda.sh && conda activate $ENV_NAME" \
+      >> /etc/bash.bashrc
+
+# 8. Tune JAX GPU behavior - set all environment variables from the memory fix module
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=${JAX_PREALLOCATE}
+ENV XLA_PYTHON_CLIENT_MEM_FRACTION=${JAX_MEM_FRAC}
+ENV XLA_PYTHON_CLIENT_ALLOCATOR=${JAX_ALLOCATOR}
+ENV JAX_PLATFORM_NAME=gpu
+ENV XLA_FLAGS="--xla_force_host_platform_device_count=1 --xla_gpu_deterministic_reductions"
+ENV JAX_DISABLE_JIT=false
+ENV JAX_ENABLE_X64=false
+ENV TF_FORCE_GPU_ALLOW_GROWTH=false
+ENV JAX_PREALLOCATION_SIZE_LIMIT_BYTES=${JAX_PREALLOC_LIMIT}
+
+# 9. Install JAX CUDA-enabled wheel
+RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
     conda activate $ENV_NAME && \
-    pip install --upgrade pip && \
-    # Preferred: pull GPU wheel via JAX extra
-    pip install 'jax[cuda12]' \
-      -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
-"
+    pip install --no-cache-dir --upgrade "jax[cuda12]==0.5.2" \
+      -f https://storage.googleapis.com/jax-releases/jax_releases.html
 
-
-
+# 10. Install IPython kernel for Jupyter
+RUN . $CONDA_DIR/etc/profile.d/conda.sh && \
+    conda activate ${ENV_NAME} && \
+    python -m ipykernel install --name ${ENV_NAME} \
+      --display-name "Python (${ENV_NAME})"
 
 WORKDIR /workspace
-CMD [\"/bin/bash\"]
+CMD ["/bin/bash"]
+
+# 11. Deduplicate LD_LIBRARY_PATH on shell startup
+RUN echo 'export LD_LIBRARY_PATH=$(printf "%s" "$LD_LIBRARY_PATH" \
+    | tr ":" "\n" | awk "!seen[$0]++" | paste -sd ":")' \
+    >> /etc/profile.d/clean_ld.sh

@@ -38,15 +38,12 @@
             // AI & collaboration
             "GitHub.copilot",
             "GitHub.vscode-pull-request-github",
-            "ms-vsliveshare.vsliveshare",
 
             // Code quality
             "njpwerner.autodocstring",
             "aaron-bond.better-comments",
             "oderwat.indent-rainbow",
 
-            // Data & MLOps
-            "ms-python.data-wrangler",
 
             // Database
             "mtxr.sqltools",

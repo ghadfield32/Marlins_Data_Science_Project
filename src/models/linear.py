@@ -41,14 +41,14 @@ def fit_ridge(X_tr: pd.DataFrame,
 
 if __name__ == "__main__":
     from pathlib import Path
-    from src.data.load_data import load_raw
+    from src.data.load_data import load_and_clean_data
     from src.features.feature_engineering import feature_engineer
     from src.data.ColumnSchema import _ColumnSchema
     from sklearn.model_selection import train_test_split
     from src.features.preprocess import summarize_categorical_missingness
     from src.features.preprocess import fit_preprocessor, transform_preprocessor, inverse_transform_preprocessor
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
-    df = load_raw(raw_path)
+    df = load_and_clean_data(raw_path)
     print(df.head())
     print(df.columns)
 
@@ -97,16 +97,16 @@ if __name__ == "__main__":
         print(null_counts)
 
     train_df, test_df = train_test_split(df_fe, test_size=0.2, random_state=42)
-    
+
     # only on training data for linear/XGB
     train_df = clip_extreme_ev(train_df)
     #valid_df = clip_extreme_ev(valid_df)
-    
+
     # run with debug prints
     X_train, y_train, tf = fit_preprocessor(train_df, model_type='linear', debug=True)
     X_test,  y_test      = transform_preprocessor(test_df, tf)
 
-        
+
     print("Processed shapes:", X_train.shape, X_test.shape)
 
     # Example of inverse transform: 
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     print("\n✅ Inverse‐transformed head (should mirror your original X_train):")
     print(df_back.head())
     print("Shape:", df_back.shape, "→ original X_train shape before transform:", X_train.shape)
-    
+
 
     # === NEW: Train & evaluate Ridge regression ===
     model_ridge, rmse_ridge = fit_ridge(X_train, y_train, X_test,  y_test)

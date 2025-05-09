@@ -32,40 +32,37 @@ class _ColumnSchema:
         "age_bin",      # 4 quantile bins of age
         "la_bin",       # 5 quantile bins of launch angle
         "spray_bin",    # 3 quantile bins of spray angle
-        "outcome_val",  # 0–4 mapping of out→HR
+        # "outcome",      # categorical outcome (out, single, double, triple, home run, sacrifice fly, sacrifice bunt, fielders choice)
     ]
 
-    _NOMINAL_CAT_COLS: List[str] = [
+
+    _NOMINAL_CAT_COLS = [
         "hit_type",
-        "outcome",
         "pitch_group",
         "batter_hand",
         "pitcher_hand",
         "hand_match",
         "pitch_hand_match",
         "same_hand",
-        "is_barrel",
-        "hard_hit",
-        "near_barrel",
+        "hitter_type", 
     ]
 
-    _NUMERICAL_COLS: List[str] = [
-        # raw inputs
-        "exit_velo",
+    _NUMERICAL_COLS = [
         "launch_angle",
         "spray_angle",
         "hangtime",
-        # engineered continuous
-        "ev_la_product",
-        "ev_la_sqrt",
-        "est_distance",
+        "height_diff",
+        "age_sq",
+        "age_centered",
+        "season_centered",
+        "level_idx",
         "player_ev_mean50",
         "player_ev_std50",
         "pitcher_ev_mean50",
-        "level_idx",
-        "season_centered",
-        "age_centered"
+        # "power_rate",
+        # "season_power_80", 
     ]
+
 
     _TARGET_COL: str = "exit_velo"
 
@@ -130,7 +127,6 @@ class _ColumnSchema:
 
 
 if __name__ == "__main__":
-    # singleton instance people can import as `cols`
     cols = _ColumnSchema()
 
     __all__ = ["cols"]

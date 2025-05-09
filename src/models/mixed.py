@@ -38,19 +38,19 @@ def fit_mixed(train: pd.DataFrame,
     return mdl, rmse
 
 if __name__ == "__main__":
-    from src.data.load_data import load_raw
+    from src.data.load_data import load_and_clean_data
     from src.features.feature_engineering import feature_engineer
     from src.features.preprocess import prepare_for_mixed_and_hierarchical
     from sklearn.model_selection import train_test_split
 
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
-    df = load_raw(raw_path)
+    df = load_and_clean_data(raw_path)
     df_fe = feature_engineer(df)
 
     # Prepare and split
     df_model = prepare_for_mixed_and_hierarchical(df_fe)
     train_df, test_df = train_test_split(df_model, test_size=0.2, random_state=42)
- 
+
     # Fit mixed-effects
     mixed_model, rmse_mixed = fit_mixed(train_df, test_df)
     print(f"Mixed-effects model RMSE: {rmse_mixed:.4f}")

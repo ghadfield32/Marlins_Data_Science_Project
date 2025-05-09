@@ -10,7 +10,8 @@ dependencies:
   - jupyterlab>=3.0.0
   - ipykernel
   - ipywidgets>=8.0.0
-  - optuna=4.3.0 
+  - optuna=4.3.0
+
   # Data & ML libraries (conda)
   - numpy>=1.20.0
   - pandas>=1.2.0
@@ -22,6 +23,9 @@ dependencies:
   - lightgbm>=3.3.0
   - catboost>=1.0.0
 
+  # Node for widgets & front-end tools
+  - nodejs>=18.0.0
+
   # Bayesian & JAX-adjacent (conda)
   - numpyro>=0.18.0
   - pymc>=5.0.0
@@ -29,7 +33,7 @@ dependencies:
   - statsmodels>=0.13.0
 
   # Utilities & extras (conda)
-  - nutpie>=0.7.1
+  - nutpie>=0.14.3 
   - tabulate>=0.9.0
   - tqdm>=4.67.0
   - pyarrow>=12.0.0
@@ -43,20 +47,20 @@ dependencies:
   - flake8>=5.0.0
   - mypy>=1.0.0
 
-  # Ensure pip is present
+
+  # Bayesian & JAX-adjacent (conda)
+  - cmdstanpy>=1.2           # Stan front-end :contentReference[oaicite:5]{index=5}
+  - cmdstan>=2.36            # CmdStan C++ backend :contentReference[oaicite:6]{index=6}
+  - tensorflow-probability   # Probabilistic methods on TF :contentReference[oaicite:8]{index=8}
+  - tensorflow>=2.16         # Required for TFP :contentReference[oaicite:9]{index=9}
+  - tf-keras>=2.18.0 
+
+  # Ensure pip is available
   - pip
 
-  # Everything below is installed via pip
+  # Pure-pip installs (no JAX here! it’s handled in Dockerfile)
   - pip:
-    # - jax==0.6.0
-    # - jaxlib==0.6.0
-    # - "jax[cuda12]==0.6.0" 
-    # - cupy-cuda12x>=12.0.0
-    - jax==0.6.0
-    # - jaxlib==0.6.0+cuda12.cudnn9
-    - "jax[cuda12]"
     - pytensor>=2.18.3
-    - aesara>=2.9.4
     - shap>=0.40.0
     - shapiq>=0.1.0
     - explainerdashboard>=0.3.0

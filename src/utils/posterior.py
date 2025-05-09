@@ -45,7 +45,9 @@ def posterior_to_frame(idata: az.InferenceData) -> pd.DataFrame:
         beta_level=beta_level,
         sigma_b=sigma_b,
         sigma_e=sigma_e,
-        median_age=idata.attrs.get("median_age", 26.0),   # we’ll set this soon
+        median_age=idata.attrs.get("median_age", 26.0),
+        beta=post["beta"].mean(("chain","draw")).values.tolist(),  # Save all beta coefficients
+        feature_names=idata.attrs.get("feature_names", [])  # Also save feature names if available
     )
 
     # ➜  write side‑car JSON (overwrite every run)
@@ -68,3 +70,4 @@ def align_batter_codes(df_roster: pd.DataFrame,
     """
     cat = pd.Categorical(df_roster["batter_id"], categories=train_cats)
     return pd.Series(cat.codes, index=df_roster.index)
+

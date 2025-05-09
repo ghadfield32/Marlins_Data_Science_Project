@@ -1,119 +1,209 @@
+
+
+import json
+from pathlib import Path
+
 import arviz as az
 import pandas as pd
 import numpy as np
-from src.utils.bayesian_explainability import (
-    plot_parameter_forest, posterior_table, plot_ppc, shap_explain
-)
-from src.data.load_data import load_raw        # for loading raw CSV data
-from src.features.feature_engineering import feature_engineer
-from src.features.preprocess import prepare_for_mixed_and_hierarchical
 
+from src.utils.posterior import align_batter_codes
 
-
-
-def predict(df: pd.DataFrame, idata) -> np.ndarray:
+# ─── new helper at top of file ────────────────────────────────────────────
+def get_top_hitters(
+    df: pd.DataFrame,
+    hitter_col: str = "hitter_type",
+    n: int = 5,
+    verbose: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Generate predictions using the posterior mean of the hierarchical model.
+    Given a DataFrame with predictions and a 'hitter_type' column,
+    return two DataFrames of the top-n POWER and CONTACT hitters by pred_mean.
+    If the column is missing, returns two empty DataFrames (and prints a warning).
+    """
+    if hitter_col not in df.columns:
+        if verbose:
+            print(f"[Warning] Column '{hitter_col}' not found; skipping top-hitter extraction.")
+        empty = pd.DataFrame(columns=[ "batter_id", hitter_col, "pred_mean", "pred_lo95", "pred_hi95" ])
+        return empty, empty
+
+    # 1) Filter power vs. contact, case‐insensitive
+    power_mask   = df[hitter_col].str.contains("POWER",   case=False, na=False)
+    contact_mask = df[hitter_col].str.contains("CONTACT", case=False, na=False)
+
+    power_df   = df.loc[power_mask]
+    contact_df = df.loc[contact_mask]
+
+    # 2) Take the top-n by pred_mean
+    top_power   = power_df.nlargest(n, "pred_mean")[ ["batter_id", hitter_col, "pred_mean", "pred_lo95", "pred_hi95"] ]
+    top_contact = contact_df.nlargest(n, "pred_mean")[ ["batter_id", hitter_col, "pred_mean", "pred_lo95", "pred_hi95"] ]
+
+    if verbose:
+        print(f"[Top {n}] power hitters:\n{top_power}")
+        print(f"[Top {n}] contact hitters:\n{top_contact}")
+
+    return top_power, top_contact
+
+
+
+def simplified_prepare_validation(df_val: pd.DataFrame, median_age: float, verbose: bool = False) -> pd.DataFrame:
+    """
+    Prepare validation dataset with simplified approach, handling missing columns gracefully.
+
+    Assumptions:
+    - All predictions are for MLB-level competition (level_idx = 2).
+    - Missing age defaults to median training age (age_centered = 0).
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Prepared DataFrame with 'level_idx' and 'age_centered' columns.
-    idata : arviz.InferenceData
-        Fitted model inference data to base predictions on.
+    df_val : pd.DataFrame
+        Raw validation dataframe (must include 'season', 'batter_id', optional 'age').
+    median_age : float
+        Median age computed from training data for centering.
+    verbose : bool
+        If True, prints debug information.
 
     Returns
     -------
-    np.ndarray
-        Array of predicted exit velocities for each row in df.
+    pd.DataFrame
+        DataFrame with added 'age_centered' and 'level_idx'.
     """
-    posterior_mean = idata.posterior.mean(dim=("chain", "draw"))
-    coef_level = posterior_mean["beta_level"].values
-    coef_age = posterior_mean["beta_age"].values
-    mu_hat = posterior_mean["mu"].values
-    return mu_hat + coef_level[df["level_idx"].values] + coef_age * df["age_centered"].values
+    df_val = df_val.copy()
+
+    # Default to MLB level for all observations
+    df_val['level_idx'] = 2
+
+    # Center age
+    if 'age' in df_val.columns:
+        df_val['age_centered'] = df_val['age'] - median_age
+    else:
+        # Using median training age => zero effect
+        df_val['age_centered'] = 0.0
+
+    if verbose:
+        print(f"[Validation Prep] level_idx set to 2 for all rows, age_centered stats: min={df_val['age_centered'].min()}, max={df_val['age_centered'].max()}")
+
+    return df_val
 
 
-if __name__ == "__main__":
-    from src.models.hierarchical_utils import save_model, load_model
-    # === Editable settings ===
-    # Path to the saved model (NetCDF format)
-    MODEL_PATH = "data/models/saved_models/exitvelo_hmc.nc"
-    # Input data for prediction (raw CSV with exit velocity data)
-    raw_path = "data/Research Data Project/Research Data Project/exit_velo_validate_data.csv"
-    # Output predictions file (CSV) or set to None to print to console
-    OUTPUT_PREDS_2024 = "data/predictions/predictions_2024.csv"  # <-- EDITABLE: set output CSV path or None
-    # Season filter for prediction/explanation
-    SEASON = 2024  
-    # Notes:
-    # - To retrain the model (train mode), you would import and call `fit_bayesian_hierarchical` from src.models.hierarchical,
-    #   passing MU_PRIOR, SIGMA_PRIOR, SAMPLER, DRAWS, and TUNE settings as needed.
-    # - Example training settings (not used in predict mode):
-    #     MU_PRIOR = 90       # Prior mean for global intercept
-    #     SIGMA_PRIOR = 5     # Scale for variability parameters
-    #     SAMPLER = "jax"    # Options: "jax", "nutpie", "advi"
-    #     DRAWS, TUNE = 1000, 1000
+def predict_from_summaries(
+    roster_csv: Path,
+    posterior_parquet: Path,
+    global_effects_json: Path,
+    output_csv: Path,
+    verbose: bool = False
+) -> pd.DataFrame:
+    """
+    Load saved model summaries and raw roster, merge random effects,
+    compute point predictions and intervals for validation set,
+    write out predictions CSV, and return the DataFrame.
 
-    # ---------------- Data loading & preparation ----------------
-    df_raw = load_raw(raw_path)           # load raw CSV into DataFrame
-    df_fe = feature_engineer(df_raw)         # apply feature engineering
-    df_model = prepare_for_mixed_and_hierarchical(df_fe)
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns:
+        ['season','batter_id','age','level_idx','age_centered','batter_idx',
+         'u_q50','u_q2.5','u_q97.5',
+         'contrib_age','contrib_level','contrib_u','contrib_features',
+         'pred_mean','pred_lo95','pred_hi95']
+    """
+    # 1) Load posterior random effects (batter-level)
+    df_post = pd.read_parquet(posterior_parquet)
+    if verbose:
+        print(f"[Load] posterior_summary: {df_post.shape} rows")
 
-    #save_model(idata, "data/models/saved_models/exitvelo_hmc.nc")
-    load_model(MODEL_PATH)
-    # extract index arrays for model features (required if retraining)
-    batter_idx = df_model["batter_id"].cat.codes.values  # categorical codes
-    level_idx = df_model["level_idx"].values
-    age_centered = df_model["age_centered"].values
+    # 2) Load validation roster
+    df_roster = pd.read_csv(roster_csv)
+    if verbose:
+        print(f"[Load] validation roster: {df_roster.shape} rows, columns: {df_roster.columns.tolist()}")
 
-    # --------------------- Load Saved Model ---------------------
-    idata = load_model(MODEL_PATH)
+    # 3) Load global effects
+    glob        = json.loads(global_effects_json.read_text())
+    post_mu     = glob['mu_mean']
+    beta_age    = glob['beta_age']
+    beta_level  = glob['beta_level'][2]  # MLB-level coefficient
+    med_age     = glob['median_age']
+    if verbose:
+        print(f"[Global Effects] mu={post_mu}, beta_age={beta_age}, "
+              f"beta_level={beta_level}, median_age={med_age}")
 
-    # --------------------- Generate Predictions ---------------------
-    # Filter to the season of interest for explanation
-    df_season = df_model[df_model["season"] == SEASON].copy()
-    if df_season.empty:
-        raise ValueError(f"No data found for season {SEASON}")
-    
-    preds_season = predict(df_season, idata)
-    df_season["predicted_exit_velo"] = preds_season
+    # 4) Prepare minimal validation features
+    df_val = simplified_prepare_validation(df_roster, med_age, verbose)
 
-    # ------------------ Output Predictions 2024 ------------------
-    if OUTPUT_PREDS_2024:
-        # Write only the key columns to CSV in one go
-        df_season[[
-            "batter_id", "level_idx", "age_centered",
-            "exit_velo", "predicted_exit_velo"
-        ]].to_csv(OUTPUT_PREDS_2024, index=False)
-        print(f"2024 season predictions written to {OUTPUT_PREDS_2024}")
+    # 5) Align batter codes and merge random effects
+    df_val['batter_idx'] = align_batter_codes(df_val, df_post['batter_idx'])
+    df = df_val.merge(df_post, on='batter_idx', how='left')
+    if verbose:
+        print(f"[Merge] merged validation with posterior: {df.shape}")
 
-    # ------------------ Summary Statistics ------------------
-    print(f"\n=== Season {SEASON} Exit Velocity Summary ===")
-    actual_desc = df_season["exit_velo"].describe()
-    pred_desc = pd.Series(preds_season, name="predicted").describe()
-    print("Actual exit_velo stats:\n", actual_desc)
-    print("\nPredicted exit_velo stats:\n", pred_desc)
+    # 6) Compute contributions & predictions
+    # 6a) Age contribution
+    df['contrib_age']   = beta_age * df['age_centered']
+    # 6b) Level (MLB) contribution
+    df['contrib_level'] = beta_level
+    # 6c) Batter random effect (median)
+    df['contrib_u']     = df['u_q50']
 
-    # ------------- Model Parameter Summaries -------------
-    print("\n=== Model Parameter Credibility ===")
-    param_table = posterior_table(idata)
-    print(param_table)
-    plot_parameter_forest(idata, var_names=["mu", "beta_level", "beta_age", "sigma_b"])
+    # 6d) Point‐estimate
+    df['pred_mean']  = post_mu + df['contrib_age'] + df['contrib_level'] + df['contrib_u']
+
+    # 6e) 95% credible‐interval bounds
+    df['pred_lo95']  = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q2.5']
+    df['pred_hi95']  = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q97.5']
+
+    # 6f) Placeholder for any other feature contributions
+    df['contrib_features'] = 0.0
+
+    # 7) Persist predictions CSV
+    df.to_csv(output_csv, index=False)
+    if verbose:
+        print(f"[Save] Predictions written to {output_csv}")
+
+    # 8) Return for downstream inspection or metrics
+    return df
 
 
-    # ----------- Posterior Predictive Check -----------
-    print("\n=== Posterior Predictive Check ===")
-    plot_ppc(idata)
 
-    # ---------------- Feature Importances ----------------
-    print("\n=== SHAP Feature Importances ===")
-    # Capture the returned SHAP values array
-    shap_values = shap_explain(
-        predict_fn=lambda df: predict(df, idata),
-        background_df=df_season.sample(min(200, len(df_season)), random_state=0),
-        sample_df=df_season.sample(min(200, len(df_season)), random_state=1),
+
+if __name__ == '__main__':
+    from src.utils.validation import (
+        prediction_interval,
+        bootstrap_prediction_interval,
     )
 
-    print("\nTop-5 SHAP feature indices (highest mean absolute impact):")
-    top5 = np.abs(shap_values).mean(0).argsort()[-5:][::-1]
-    print(top5)
+    BASE    = Path('data/models/saved_models')
+    SUMMARY = BASE / 'posterior_summary.parquet'
+    GLOBAL  = BASE / 'global_effects.json'
+    ROSTER  = Path('data/Research Data Project/Research Data Project/exit_velo_validate_data.csv')
+    OUT     = Path('data/predictions/exitvelo_predictions_2024.csv')
+
+    # 1) Generate predictions + CI columns
+    predict_df = predict_from_summaries(
+        roster_csv=ROSTER,
+        posterior_parquet=SUMMARY,
+        global_effects_json=GLOBAL,
+        output_csv=OUT,
+        verbose=True
+    )
+    print(predict_df.head())
+
+    # 2) Empirical RMSE if 'exit_velo' present
+    df_val = pd.read_csv(ROSTER)
+    if 'exit_velo' in df_val.columns:
+        y_true = df_val['exit_velo'].values
+        y_pred = predict_df['pred_mean'].values
+        rmse_val = np.sqrt(np.mean((y_pred - y_true)**2))
+        print("\n--- empirical RMSE on validation set ---", rmse_val)
+
+    # 3) Prepare a preds DataFrame for CI routines
+    preds = predict_df['pred_mean'].to_frame(name='pred')
+    lo95  = predict_df['pred_lo95'].values
+    hi95  = predict_df['pred_hi95'].values
+
+
+    # 4) Safely extract top hitters (requires a 'hitter_type' column)
+    top_power, top_contact = get_top_hitters(predict_df, hitter_col="hitter_type", n=5, verbose=True)
+
+    print("\nTop Power Hitters (if any):\n", top_power)
+    print("\nTop Contact Hitters (if any):\n", top_contact)
+

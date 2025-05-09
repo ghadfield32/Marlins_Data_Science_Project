@@ -3,12 +3,6 @@
 All helpers are pure functions that take a pandas DataFrame and return a *copy*
 with additional engineered columns so we avoid side effects.
 
-Example
--------
->>> from src.data.load_data import load_raw
->>> from src.features.feature_engineering import feature_engineer
->>> df = load_raw()
->>> df_fe = feature_engineer(df)
 """
 from __future__ import annotations
 
@@ -18,139 +12,133 @@ import numpy as np
 ###############################################################################
 # Helper functions
 ###############################################################################
+def _classify_hitters_by_season(
+    df: pd.DataFrame,
+    batter_col: str = "batter_id",
+    season_col: str = "season",
+    outcome_col: str = "outcome",
+    power_pct: float = 0.8,
+) -> pd.Series:
+    """
+    Season-by-season classification: top `power_pct` hitters by triple+HR rate
+    are 'POWER', all others 'CONTACT'. Batters with no hits default to CONTACT.
+    """
+    # 1) restrict to actual base hits
+    hits = df[df[outcome_col].isin(["SINGLE","DOUBLE","TRIPLE","HOME RUN"])].copy()
 
-def _rolling_stat(
+    # 2) count per (season, batter)
+    counts = (
+        hits
+        .assign(
+            contact = lambda d: d[outcome_col].isin(["SINGLE","DOUBLE"]).astype(int),
+            power   = lambda d: d[outcome_col].isin(["TRIPLE","HOME RUN"]).astype(int),
+        )
+        .groupby([season_col, batter_col])
+        .agg(
+            total_hits   = (outcome_col, "size"),
+            contact_hits = ("contact",    "sum"),
+            power_hits   = ("power",      "sum"),
+        )
+    )
+    counts["power_rate"]   = counts["power_hits"]   / counts["total_hits"]
+    counts["contact_rate"] = counts["contact_hits"] / counts["total_hits"]
+
+    # 3) find the season‐level 80th percentile of power_rate
+    pct80 = counts.groupby(level=0)["power_rate"].quantile(power_pct)
+    # map it back onto each row
+    counts["season_power_80"] = counts.index.get_level_values(season_col).map(pct80)
+
+    # 4) label
+    def _label(row):
+        return "POWER" if row.power_rate >= row.season_power_80 else "CONTACT"
+
+    labels = counts.apply(_label, axis=1)
+    labels.name = "hitter_type"
+    return labels
+
+
+
+
+def _rolling_stat_lagged(
     df: pd.DataFrame,
     group_cols: list[str],
     target: str,
     stat: str = "mean",
     window: int = 50,
 ) -> pd.Series:
-    """Group‑wise rolling statistic.  Sorted by season order of appearance.
-
-    The function first sorts by the index order (assumed chronological inside each
-    group) then applies a rolling window with *min_periods=10* so early samples
-    are not overly noisy.
     """
-    return (
-        df.sort_values(group_cols)
-        .groupby(group_cols)[target]
-        .rolling(window, min_periods=10)
-        .agg(stat)
-        .reset_index(level=group_cols, drop=True)
+    Group-wise rolling statistic using only *previous* rows.
+    For each group defined by group_cols, shift the target by 1 row 
+    then compute a rolling(window) agg(stat) with min_periods=10.
+    """
+    # 1) Within each group, shift the target by one so we only use past data
+    def shifted_rolling(x: pd.Series) -> pd.Series:
+        return x.shift(1).rolling(window=window, min_periods=10).agg(stat)
+
+    rolled = (
+        df
+        .groupby(group_cols)[target]     # group by batter_id or pitcher_id
+        .apply(shifted_rolling)          # shift & roll inside each group
+        .reset_index(level=group_cols, drop=True)  # get back a plain Series
     )
+    return rolled
+
 
 ###############################################################################
 # Public API
 ###############################################################################
 
 def feature_engineer(df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
-    """Return a DataFrame enriched with engineered features.
-
-    Parameters
-    ----------
-    df   : raw data as returned by ``load_raw``
-    copy : if *True* (default) operate on a copy so the original is untouched.
-    """
+    """Return a DataFrame enriched with engineered features (no leakage)."""
 
     if copy:
         df = df.copy()
 
-    # ────────────────────────────────────────────────────────────────────────
-    # 1. Basic type harmonisation & canonical casing
-    # ────────────────────────────────────────────────────────────────────────
+    # 1) Uppercase strings
     str_cols = df.select_dtypes(include=['object', 'string']).columns
     df[str_cols] = df[str_cols].apply(lambda col: col.str.upper())
 
-    # ────────────────────────────────────────────────────────────────────────
-    # 2. Age engineering (dynamic quantile bins)
-    # ────────────────────────────────────────────────────────────────────────
-    df["age_sq"] = df["age"] ** 2  # capture non‑linear aging curve
-    n_age_bins = 4
-    df["age_bin"] = pd.qcut(df["age"], q=n_age_bins, duplicates='drop')
-    
-    # ────────────────────────────────────────────────────────────────────────
-    # 3. Height normalisation relative to MLB average (~74 inches)
-    # ────────────────────────────────────────────────────────────────────────
-    avg_batter_height = df["batter_height"].mean()
-    
-    # Use the average batter height to calculate height_diff
-    df["height_diff"] = df["batter_height"] - avg_batter_height
+    # 2) Age
+    df["age_sq"]   = df["age"] ** 2
+    df["age_bin"]  = pd.qcut(df["age"], q=4, duplicates='drop')
 
-    # ────────────────────────────────────────────────────────────────────────
-    # 4. Launch / spray angle buckets (dynamic quantile bins) & barrel indicator
-    # ────────────────────────────────────────────────────────────────────────
-    # Dynamic launch-angle bins
-    n_la_bins = 5
-    df["la_bin"] = pd.qcut(df["launch_angle"], q=n_la_bins, duplicates='drop')
+    # 3) Height
+    avg_height    = df["batter_height"].mean()
+    df["height_diff"] = df["batter_height"] - avg_height
 
-    # Dynamic spray-angle bins
-    n_spray_bins = 3
-    df["spray_bin"] = pd.qcut(df["spray_angle"], q=n_spray_bins, duplicates='drop')
+    # 4) Launch & spray bins
+    df["la_bin"]    = pd.qcut(df["launch_angle"], q=5, duplicates='drop')
+    df["spray_bin"] = pd.qcut(df["spray_angle"], q=3, duplicates='drop')
 
-    # Statcast barrel proxy: EV >= 98 & 26° > LA >= 8°
-    df["is_barrel"] = (
-        (df["exit_velo"] >= 98) & (df["launch_angle"] >= 8) & (df["launch_angle"] < 26)
-    ).astype("category")
-
-
-    # ────────────────────────────────────────────────────────────────────────
-    # 6. Handedness & matchup indicators
-    # ────────────────────────────────────────────────────────────────────────
-    df["same_hand"] = (df["batter_hand"] == df["pitcher_hand"])
-    df["hand_match"] = df["batter_hand"] + "_VS_" + df["pitcher_hand"]
-
-    # ────────────────────────────────────────────────────────────────────────
-    # 7. Pitch‑type interactions
-    # ────────────────────────────────────────────────────────────────────────
+    # 5) Handedness & matchups
+    df["same_hand"]        = (df["batter_hand"] == df["pitcher_hand"])
+    df["hand_match"]       = df["batter_hand"] + "_VS_" + df["pitcher_hand"]
     df["pitch_hand_match"] = df["pitch_group"] + "_" + df["hand_match"]
 
-    # ────────────────────────────────────────────────────────────────────────
-    # 8. Player‑level historical stats (rolling EV mean & SD)
-    #    These capture each hitter’s *latent* ability and shrink early samples
-    #    via wider rolling windows.
-    # ────────────────────────────────────────────────────────────────────────
-    df["player_ev_mean50"] = _rolling_stat(df, ["batter_id"], "exit_velo", "mean", 50)
-    df["player_ev_std50"] = _rolling_stat(df, ["batter_id"], "exit_velo", "std", 50)
-    # ✱ NEW: safe assignment, no inplace chain ✱
-    ev_mean_global = df["exit_velo"].mean()
-    ev_std_global  = df["exit_velo"].std()
-    df["player_ev_mean50"] = df["player_ev_mean50"].fillna(ev_mean_global)
-    df["player_ev_std50"]  = df["player_ev_std50"].fillna(ev_std_global)
+    # 6) Batter lagged rolling EV stats
+    df["player_ev_mean50"] = _rolling_stat_lagged(df, ["batter_id"], "exit_velo", "mean", 50)
+    df["player_ev_std50"]  = _rolling_stat_lagged(df, ["batter_id"], "exit_velo",  "std", 50)
+    gm = df["exit_velo"].mean(); gs = df["exit_velo"].std()
+    df["player_ev_mean50"].fillna(gm)
+    df["player_ev_std50"].fillna(gs)
 
-    # 9a. Hard‑hit & barrel‑adjacent flags
-    df["hard_hit"] = (df["exit_velo"] >= 95).astype("category")
-    df["near_barrel"] = (
-        (df["exit_velo"].between(95, 98)) &
-        (df["launch_angle"].between(5, 30))
-    ).astype("category")
+    # 7) Pitcher lagged mean
+    df["pitcher_ev_mean50"] = _rolling_stat_lagged(df, ["pitcher_id"], "exit_velo", "mean", 50)
+    df["pitcher_ev_mean50"].fillna(gm)
 
-    # 9b. EV × LA and distance proxy
-    df["ev_la_product"] = df["exit_velo"] * (df["launch_angle"] + 90)
-    df["est_distance"] = df["exit_velo"] * df["hangtime"]
-    df["ev_la_sqrt"] = np.sqrt(df["ev_la_product"].clip(lower=0))
+    # 8) Center covariates
+    df["age_centered"]    = df["age"]    - df["age"].median()
+    df["season_centered"] = df["season"] - df["season"].median()
+    df["level_idx"]       = df["level_abbr"].map({"AA":0, "AAA":1, "MLB":2})
 
-    # 10. Pitcher rolling stats 
-    pitcher_mean = df["exit_velo"].mean()
-    df["pitcher_ev_mean50"] = _rolling_stat(df, ["pitcher_id"], "exit_velo", "mean", 50)
-    df["pitcher_ev_mean50"] = df["pitcher_ev_mean50"].fillna(pitcher_mean)
+    # --- 9) New season‐by‐season batter classification ---
+    labels = _classify_hitters_by_season(df)
+    # bring labels into df by season & batter_id
+    labels_df = labels.reset_index()  # columns: [season, batter_id, hitter_type]
+    df = df.merge(labels_df, on=["season","batter_id"], how="left")
 
-
-    # 11. Outcome encoding – simple value mapping for power/speed signal.
-    _OUTCOME_W = {
-        "out": 0,
-        "single": 1,
-        "double": 2,
-        "triple": 3,
-        "home run": 4,
-    }
-    df["outcome_val"] = df["outcome"].str.lower().map(_OUTCOME_W)
-
-    # centred covariates
-    df["age_centered"]    = df["age"] - df["age"].median()
-    df["season_centered"] = df["season"] - df["season"].median()   # ⬅ NEW
-    df["level_idx"]       = df["level_abbr"].map({"AA": 0, "AAA": 1, "MLB": 2})
-    
+    # 10) fill anyone still NaN → they had no base hits
+    df["hitter_type"] = df["hitter_type"].fillna("CONTACT")
     return df
 
 ###############################################################################
@@ -159,24 +147,38 @@ def feature_engineer(df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
 
 if __name__ == "__main__":
     from pathlib import Path
-    from src.data.load_data import load_raw
+    from src.data.load_data import load_and_clean_data
 
     raw_path = "data/Research Data Project/Research Data Project/exit_velo_project_data.csv"
-    df = load_raw(raw_path)
+    df = load_and_clean_data(raw_path, debug = True)
     print(df.head())
     print(df.columns)
 
-    # --- inspect nulls in the raw data ---
-    null_counts = df.isnull().sum()
-    null_counts = null_counts[null_counts > 0]
-    if null_counts.empty:
-        print("✅  No missing values in raw data.")
-    else:
-        print("=== Raw data null counts ===")
-        for col, cnt in null_counts.items():
-            print(f" • {col!r}: {cnt} missing")
     df_fe = feature_engineer(df)
 
     print("Raw →", df.shape, "//  Feature‑engineered →", df_fe.shape)
     print(df_fe.head())
     print(df_fe.columns)
+
+
+    # --- DEBUG: batters with no classification ---
+    missing_mask = df_fe["hitter_type"].isna()
+    missing_df   = df_fe[missing_mask].copy()
+    unique_b     = missing_df["batter_id"].nunique()
+    print(f"[DEBUG] {unique_b} unique batters have no label (NaN in hitter_type).")
+
+    # --- Fix sort_values key to map each array's length ---
+    outcome_by_batter = (
+        missing_df
+        .groupby("batter_id")["outcome"]
+        .unique()
+        .sort_values(
+            key=lambda s: s.map(len),      # for each entry, use len(array)
+            ascending=False
+        )
+    )
+    print("[DEBUG] Sample of missing batters → their unique outcomes:")
+    print(outcome_by_batter.head(10).to_dict())
+
+    print("[DEBUG] Outcome value counts among missing batters:")
+    print(missing_df["outcome"].value_counts().to_dict())
