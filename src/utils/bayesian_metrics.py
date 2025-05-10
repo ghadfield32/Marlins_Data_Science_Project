@@ -28,38 +28,89 @@ def compute_classical_metrics(idata, y_true):
 
 
 
-def compute_bayesian_metrics(idata):
+
+
+def _chunked_loo_waic(idata, chunk_size):
+    """
+    Internal helper: compute pointwise LOO/WAIC in chunks of observations.
+    """
+    # Extract raw log-likelihood array [chains, draws, obs]
+    ll = idata.log_likelihood["y_obs"].values
+    n_obs = ll.shape[-1]
+
+    elpd_loo_i   = np.empty(n_obs, dtype=float)
+    p_loo_i      = np.empty(n_obs, dtype=float)
+    pareto_k_all = []
+    elpd_waic_i  = np.empty(n_obs, dtype=float)
+    p_waic_i     = np.empty(n_obs, dtype=float)
+
+    for start in range(0, n_obs, chunk_size):
+        end = min(start + chunk_size, n_obs)
+        subset = idata.isel(observed_data={"obs": slice(start, end)})
+
+        loo_sub  = az.loo(subset,  pointwise=True)
+        waic_sub = az.waic(subset, pointwise=True)
+
+        elpd_loo_i [start:end] = loo_sub["elpd_loo"].values
+        p_loo_i    [start:end] = loo_sub["p_loo"].values
+        pareto_k_all.extend(loo_sub["pareto_k"].values.tolist())
+
+        elpd_waic_i[start:end] = waic_sub["elpd_waic"].values
+        p_waic_i   [start:end] = waic_sub["p_waic"].values
+
+    loo = az.ELPDData(
+        {"elpd_loo": ("obs", elpd_loo_i),
+         "p_loo":    ("obs", p_loo_i),
+         "pareto_k": ("obs", np.array(pareto_k_all))},
+        coords={"obs": np.arange(n_obs)},
+        dims   ={"elpd_loo": ["obs"], "p_loo": ["obs"], "pareto_k": ["obs"]}
+    )
+    waic = az.ELPDData(
+        {"elpd_waic": ("obs", elpd_waic_i),
+         "p_waic":    ("obs", p_waic_i)},
+        coords={"obs": np.arange(n_obs)},
+        dims   ={"elpd_waic": ["obs"], "p_waic": ["obs"]}
+    )
+    return loo, waic
+
+
+def compute_bayesian_metrics(idata, *, use_chunks: bool = False, chunk_size: int | None = None):
     """Compute PSIS-LOO, WAIC and Pareto k diagnostics for model comparison."""
     # 1) Guard missing log_likelihood
     if 'log_likelihood' not in idata.groups():
         print("⚠️ InferenceData has no log_likelihood; skipping LOO/WAIC.")
         return None
 
+    # Validate chunk parameters
+    if use_chunks:
+        if chunk_size is None or chunk_size <= 0:
+            raise ValueError("When use_chunks=True, chunk_size must be a positive integer")
+
+    # 2) Compute LOO & WAIC (batch or chunked)
     try:
-        loo  = az.loo(idata, pointwise=True)
-        waic = az.waic(idata, pointwise=True)
+        if not use_chunks:
+            loo  = az.loo(idata,  pointwise=True)
+            waic = az.waic(idata, pointwise=True)
+        else:
+            loo, waic = _chunked_loo_waic(idata, chunk_size)
     except Exception as e:
         print(f"⚠️ LOO/WAIC computation failed: {e}")
         return None
 
-    # 2) Extract scalars by indexing the ELPDData (a pandas Series)
-    #    LOOIC = -2 * elpd_loo
-    looic    = -2 * loo['elpd_loo']
-    p_loo    = loo['p_loo']
+    # 3) Extract scalars
+    looic    = -2 * loo["elpd_loo"].sum()
+    p_loo    = loo["p_loo"].sum()
+    waic_val = -2 * waic["elpd_waic"].sum()
+    p_waic   = waic["p_waic"].sum()
+    prop_bad_k = np.mean(loo["pareto_k"].values > 0.7)
 
-    #    WAIC  = -2 * elpd_waic
-    waic_val = -2 * waic['elpd_waic']
-    p_waic   = waic['p_waic']
-
-    #    Pareto k diagnostic: proportion of observations with k > 0.7
-    prop_bad_k = np.mean(loo['pareto_k'].values > 0.7)
-
-    # 3) Print results
+    # 4) Print results
     print(f"▶ LOOIC       : {looic:.1f}, p_loo: {p_loo:.1f}")
     print(f"▶ WAIC        : {waic_val:.1f}, p_waic: {p_waic:.1f}")
     print(f"▶ Pareto k>0.7: {prop_bad_k:.2%} of observations")
 
     return {'loo': loo, 'waic': waic, 'prop_bad_k': prop_bad_k}
+
 
 
 

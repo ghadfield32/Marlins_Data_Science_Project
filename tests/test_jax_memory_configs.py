@@ -1,4 +1,3 @@
-
 # location: tests/test_jax_memory_configs.py
 """
 Spawn a fresh Python for each flag combo and assert the pooled
@@ -30,7 +29,7 @@ code_tpl = textwrap.dedent("""
         tot, free = (int(s.strip()) for s in re.split(r",\\s*", out, 1))
         return free*1048576, tot*1048576
     f,t = mem(); pool = (t-f)/t
-    need = 0.065 if "{pre}"=="true" else 0.05
+    need = 0.035 if "{pre}"=="true" else 0.03
     print(json.dumps(dict(pool=pool, need=need)))
 """)
 

@@ -5,11 +5,6 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-# Ensure src directory is on sys.path so tests can import utils
-ROOT_DIR = pathlib.Path(__file__).resolve().parent
-SRC_DIR = ROOT_DIR / 'src'
-sys.path.insert(0, str(SRC_DIR))
-
 # Skip entire module if no GPU device is available for JAX
 if not any(device.platform == 'gpu' for device in jax.devices()):
     pytest.skip("Skipping GPU tests since JAX GPU backend unavailable", allow_module_level=True)
@@ -23,11 +18,10 @@ from src.utils.jax_gpu_utils import (
     log_gpu_diagnostics
 )
 
-
 def test_apply_jax_memory_fix_returns_dict():
     settings = apply_jax_memory_fix(fraction=0.5, preallocate=False, verbose=False)
     assert isinstance(settings, dict), "Expected settings to be a dict"
-    assert 'fraction' in settings and 'preallocate' in settings, "Returned settings missing expected keys"
+    assert 'XLA_PYTHON_CLIENT_MEM_FRACTION' in settings, "Returned settings missing expected keys"
 
 
 def test_force_memory_allocation_boolean():
@@ -58,7 +52,7 @@ def test_simple_jax_matmul():
     x = jnp.ones((10, 10))
     result = jnp.matmul(x, x).block_until_ready()
     assert result.shape == (10, 10), f"Unexpected result shape: {result.shape}"
-    assert float(result.sum()) == pytest.approx(100.0), "Sum of resulting matrix should be 100.0"
+    assert float(result.sum()) == pytest.approx(1000.0), "Sum of resulting matrix should be 1000.0"
 
 
 def test_gpu_diagnostics_and_logging(caplog):

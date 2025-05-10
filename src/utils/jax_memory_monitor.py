@@ -84,7 +84,12 @@ def print_memory_snapshot(snapshot: Dict[str, Any]):
         
     if "memory" in snapshot and "nvidia_smi" in snapshot["memory"]:
         for gpu in snapshot["memory"]["nvidia_smi"]:
-            print(f"GPU {gpu['gpu_id']}: {gpu['used_mb']}MB / {gpu['total_mb']}MB ({gpu['utilization']}%)")
+            # Adapt to different key formats that may exist
+            gpu_id = gpu.get('index', gpu.get('gpu_id', 0))
+            used = gpu.get('used_memory_mb', gpu.get('used_mb', 0))
+            total = gpu.get('total_memory_mb', gpu.get('total_mb', 0))
+            util = gpu.get('utilization', 0)
+            print(f"GPU {gpu_id}: {used}MB / {total}MB ({util}%)")
     else:
         print("No GPU memory information available")
 
@@ -124,8 +129,16 @@ def monitor_memory_usage(operation_name: str, verbose: bool = True):
                 before_gpu = before_snapshot["memory"]["nvidia_smi"][0]
                 after_gpu = after_snapshot["memory"]["nvidia_smi"][0]
                 
-                memory_diff = after_gpu["used_mb"] - before_gpu["used_mb"]
-                util_diff = after_gpu["utilization"] - before_gpu["utilization"]
+                # Handle different key formats
+                before_used = before_gpu.get('used_memory_mb', before_gpu.get('used_mb', 0))
+                after_used = after_gpu.get('used_memory_mb', after_gpu.get('used_mb', 0))
+                
+                memory_diff = after_used - before_used
+                
+                # Get utilization values or default to 0
+                before_util = before_gpu.get('utilization', 0)
+                after_util = after_gpu.get('utilization', 0)
+                util_diff = after_util - before_util
                 
                 print(f"Memory change: {memory_diff:+}MB ({util_diff:+.2f}%)")
 
@@ -152,18 +165,21 @@ def force_allocation_if_needed(target_fraction: float = 0.8,
         logger.warning("Could not get GPU memory info")
         return {"success": False, "error": "Could not get GPU memory info"}
     
-    # Calculate current utilization
-    current_util = memory_info["nvidia_smi"][0]["utilization"] / 100.0
+    # Calculate current memory usage fraction
+    gpu = memory_info["nvidia_smi"][0]
+    used_mb = gpu["used_memory_mb"]
+    total_mb = gpu["total_memory_mb"]
+    current_frac = used_mb / total_mb
     
     if verbose:
-        print(f"Current GPU memory utilization: {current_util:.2%}")
-        print(f"Target utilization: {target_fraction:.2%}")
+        print(f"Current GPU memory usage: {used_mb}MB / {total_mb}MB ({current_frac:.2%})")
+        print(f"Target memory usage: {target_fraction:.2%}")
     
     # Skip if already above threshold
-    if current_util >= current_usage_threshold:
+    if current_frac >= current_usage_threshold:
         if verbose:
-            print(f"Current utilization {current_util:.2%} already above threshold {current_usage_threshold:.2%}, skipping allocation")
-        return {"success": True, "action": "skipped", "current_utilization": current_util}
+            print(f"Current memory usage {current_frac:.2%} already above threshold {current_usage_threshold:.2%}, skipping allocation")
+        return {"success": True, "action": "skipped", "current_fraction": current_frac}
     
     # Import here to avoid circular imports
     from src.utils.jax_memory_fix_module import allocate_memory_incremental

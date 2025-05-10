@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 
 from src.utils.posterior import align_batter_codes
+from src.features.feature_engineering import feature_engineer
+
 
 # ─── new helper at top of file ────────────────────────────────────────────
 def get_top_hitters(
@@ -86,81 +88,102 @@ def simplified_prepare_validation(df_val: pd.DataFrame, median_age: float, verbo
     return df_val
 
 
+
 def predict_from_summaries(
+    *,
     roster_csv: Path,
+    raw_csv: Path,
     posterior_parquet: Path,
     global_effects_json: Path,
     output_csv: Path,
-    verbose: bool = False
+    verbose: bool = False,
+    level_idx: int = 2,  # allow override if you ever want a different level
 ) -> pd.DataFrame:
-    """
-    Load saved model summaries and raw roster, merge random effects,
-    compute point predictions and intervals for validation set,
-    write out predictions CSV, and return the DataFrame.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with columns:
-        ['season','batter_id','age','level_idx','age_centered','batter_idx',
-         'u_q50','u_q2.5','u_q97.5',
-         'contrib_age','contrib_level','contrib_u','contrib_features',
-         'pred_mean','pred_lo95','pred_hi95']
-    """
-    # 1) Load posterior random effects (batter-level)
-    df_post = pd.read_parquet(posterior_parquet)
-    if verbose:
-        print(f"[Load] posterior_summary: {df_post.shape} rows")
-
-    # 2) Load validation roster
+    # --- 1) Load artefacts ------------------------------------------------
+    df_post   = pd.read_parquet(posterior_parquet)
     df_roster = pd.read_csv(roster_csv)
-    if verbose:
-        print(f"[Load] validation roster: {df_roster.shape} rows, columns: {df_roster.columns.tolist()}")
+    df_raw    = pd.read_csv(raw_csv)
 
-    # 3) Load global effects
-    glob        = json.loads(global_effects_json.read_text())
-    post_mu     = glob['mu_mean']
-    beta_age    = glob['beta_age']
-    beta_level  = glob['beta_level'][2]  # MLB-level coefficient
-    med_age     = glob['median_age']
-    if verbose:
-        print(f"[Global Effects] mu={post_mu}, beta_age={beta_age}, "
-              f"beta_level={beta_level}, median_age={med_age}")
+    # --- 2) Load & validate global effects -------------------------------
+    try:
+        glob = json.loads(global_effects_json.read_text())
+    except FileNotFoundError:
+        raise ValueError(f"Global-effects file {global_effects_json} not found")
 
-    # 4) Prepare minimal validation features
+    if not glob:
+        raise ValueError(
+            f"{global_effects_json} is empty – missing Intercept/beta_age/beta_level"
+        )
+
+    # --- 2a) Inspect beta_level representation (for debugging) -----------
+    raw_bl = glob.get("beta_level", None)
+    if verbose:
+        print(f"[Debug] loaded beta_level of type {type(raw_bl).__name__}: {raw_bl}")
+
+    # --- 2b) Robust retrieval of beta_level -----------------------------
+    if isinstance(raw_bl, dict):
+        # dict may use string keys or possibly int keys
+        beta_level = raw_bl.get(str(level_idx),
+                        raw_bl.get(level_idx, 0.0))
+    elif isinstance(raw_bl, (list, tuple)):
+        # list index
+        try:
+            beta_level = raw_bl[level_idx]
+        except (IndexError, TypeError):
+            beta_level = 0.0
+    else:
+        # unrecognized format
+        beta_level = 0.0
+
+    # pull the rest
+    post_mu  = glob.get("mu_mean",    0.0)
+    beta_age = glob.get("beta_age",    0.0)
+    med_age  = glob.get(
+        "median_age",
+        float(df_raw.get('age', pd.Series()).median() or 0.0)
+    )
+
+    # --- 3) Feature engineering (unchanged) ------------------------------
+    df_fe = feature_engineer(df_raw)
+    mapping = (
+        df_fe[df_fe['season']==2023][['batter_id','hitter_type']]
+             .dropna()
+             .groupby('batter_id')['hitter_type']
+             .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0])
+             .to_dict()
+    )
+    df_roster['hitter_type'] = df_roster['batter_id'].map(mapping).fillna("UNKNOWN")
+
+    # --- 4) Validation prep & merge --------------------------------------
     df_val = simplified_prepare_validation(df_roster, med_age, verbose)
-
-    # 5) Align batter codes and merge random effects
     df_val['batter_idx'] = align_batter_codes(df_val, df_post['batter_idx'])
     df = df_val.merge(df_post, on='batter_idx', how='left')
-    if verbose:
-        print(f"[Merge] merged validation with posterior: {df.shape}")
 
-    # 6) Compute contributions & predictions
-    # 6a) Age contribution
-    df['contrib_age']   = beta_age * df['age_centered']
-    # 6b) Level (MLB) contribution
+    # --- 5) Compute contributions & predictions --------------------------
+    df['contrib_age']   = beta_age   * df['age_centered']
     df['contrib_level'] = beta_level
-    # 6c) Batter random effect (median)
     df['contrib_u']     = df['u_q50']
 
-    # 6d) Point‐estimate
-    df['pred_mean']  = post_mu + df['contrib_age'] + df['contrib_level'] + df['contrib_u']
+    df['pred_mean'] = post_mu + (
+        df['contrib_age'] + df['contrib_level'] + df['contrib_u']
+    )
+    df['pred_lo95'] = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q2.5']
+    df['pred_hi95'] = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q97.5']
 
-    # 6e) 95% credible‐interval bounds
-    df['pred_lo95']  = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q2.5']
-    df['pred_hi95']  = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q97.5']
-
-    # 6f) Placeholder for any other feature contributions
-    df['contrib_features'] = 0.0
-
-    # 7) Persist predictions CSV
-    df.to_csv(output_csv, index=False)
+    # --- 6) Persist with auto-mkdir + locked column order ---------------
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    cols = [
+        "season","batter_id","age","hitter_type","level_idx","age_centered",
+        "batter_idx","u_q2.5","u_q50","u_q97.5",
+        "contrib_age","contrib_level","contrib_u",
+        "pred_mean","pred_lo95","pred_hi95"
+    ]
+    df[cols].to_csv(output_csv, index=False)
     if verbose:
-        print(f"[Save] Predictions written to {output_csv}")
+        print(f"[Save] predictions → {output_csv}")
 
-    # 8) Return for downstream inspection or metrics
     return df
+
 
 
 
@@ -170,16 +193,30 @@ if __name__ == '__main__':
         prediction_interval,
         bootstrap_prediction_interval,
     )
+    from src.features.feature_engineering import feature_engineer
 
     BASE    = Path('data/models/saved_models')
     SUMMARY = BASE / 'posterior_summary.parquet'
     GLOBAL  = BASE / 'global_effects.json'
     ROSTER  = Path('data/Research Data Project/Research Data Project/exit_velo_validate_data.csv')
+    RAW     = Path('data/Research Data Project/Research Data Project/exit_velo_project_data.csv')  # your training file
     OUT     = Path('data/predictions/exitvelo_predictions_2024.csv')
+
+    # load raw data
+    df_raw = pd.read_csv(RAW)
+    df_fe    = feature_engineer(df_raw)
+    print(df_fe.head())
+    print(df_fe.columns)
+    # load posterior summary
+    df_post = pd.read_parquet(SUMMARY)
+    # load global effects
+    glob = json.loads(GLOBAL.read_text())
+    
 
     # 1) Generate predictions + CI columns
     predict_df = predict_from_summaries(
         roster_csv=ROSTER,
+        raw_csv=RAW, 
         posterior_parquet=SUMMARY,
         global_effects_json=GLOBAL,
         output_csv=OUT,
@@ -204,6 +241,4 @@ if __name__ == '__main__':
     # 4) Safely extract top hitters (requires a 'hitter_type' column)
     top_power, top_contact = get_top_hitters(predict_df, hitter_col="hitter_type", n=5, verbose=True)
 
-    print("\nTop Power Hitters (if any):\n", top_power)
-    print("\nTop Contact Hitters (if any):\n", top_contact)
-
+    

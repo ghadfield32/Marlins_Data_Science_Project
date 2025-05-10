@@ -40,41 +40,36 @@ _settings_applied = False
 # This prevents garbage collection and ensures memory stays allocated
 _memory_registry = {}
 
-def apply_jax_memory_fix(fraction=0.95, preallocate=True, verbose=True, 
-                          prealloc_limit_bytes=None):
+def apply_jax_memory_fix(*,
+                         fraction: float = 0.45,
+                         preallocate: bool = False,
+                         verbose: bool = True,
+                         prealloc_limit_bytes: int | None = None) -> dict:
     """
-    Apply JAX GPU memory optimization settings.
-    
-    This function sets environment variables to optimize JAX's GPU memory usage.
-    
-    Args:
-        fraction (float): Fraction of GPU memory that JAX can use (0.0 to 1.0)
-        preallocate (bool): Whether to preallocate GPU memory
-        verbose (bool): Whether to print diagnostic information
-        prealloc_limit_bytes (int, optional): Limit for preallocation in bytes
-        
-    Returns:
-        dict: The applied environment variables
+    Safer GPU-memory policy for JAX.
+
+    • No pre-allocation by default.
+    • Fraction is 'soft' – XLA will not exceed it unless unavoidable.
+    • All params can still be overridden by caller.
     """
     global _settings_applied
-    
-    # Update with user-provided values
+
     settings = env_vars.copy()
-    settings["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(fraction)
-    settings["XLA_PYTHON_CLIENT_PREALLOCATE"] = str(preallocate).lower()
-    
-    # Set preallocation limit if provided
+    settings.update({
+        "XLA_PYTHON_CLIENT_PREALLOCATE": str(preallocate).lower(),
+        "XLA_PYTHON_CLIENT_MEM_FRACTION": f"{fraction:.2f}",
+    })
     if prealloc_limit_bytes is not None:
         settings["JAX_PREALLOCATION_SIZE_LIMIT_BYTES"] = str(prealloc_limit_bytes)
-    
-    # Apply all environment variables
-    for key, value in settings.items():
-        os.environ[key] = value
-    
+    else:
+        settings.pop("JAX_PREALLOCATION_SIZE_LIMIT_BYTES", None)
+
+    for k, v in settings.items():
+        os.environ[k] = v
+
     if verbose and not _settings_applied:
-        print(f"JAX memory settings applied (fraction={fraction}, preallocate={preallocate})")
-        print(f"Use larger batches to force more memory allocation if needed.")
-    
+        print(f"[JAX-mem] fraction={fraction}  preallocate={preallocate}")
+
     _settings_applied = True
     return settings
 
@@ -155,88 +150,49 @@ def force_memory_allocation(size_mb=1000, verbose=True, keep_reference=True,
             print(f"Error allocating memory: {str(e)}")
         return False
 
-def allocate_memory_incremental(target_fraction=0.6, step_size_mb=1000, 
-                               max_steps=10, check_interval=0.5, verbose=True):
+def allocate_memory_incremental(*,
+                                target_fraction: float = 0.60,
+                                step_size_mb: int = 512,
+                                max_steps: int = 12,
+                                check_interval: float = 0.4,
+                                verbose: bool = True) -> dict:
     """
-    Incrementally allocate GPU memory until reaching a target utilization.
-    
-    Args:
-        target_fraction (float): Target fraction of GPU memory to use (0.0 to 1.0)
-        step_size_mb (int): Size of each allocation step in MB
-        max_steps (int): Maximum number of allocation steps
-        check_interval (float): Time in seconds to wait between allocations
-        verbose (bool): Whether to print progress
-        
-    Returns:
-        dict: Information about the allocation process
+    Incrementally reserve **VRAM**, not compute utilisation.
+
+    We look at `used_memory_mb / total_memory_mb`.  Stops exactly at target.
     """
-    try:
-        # Import here to avoid circular imports
-        from src.utils.jax_gpu_utils import get_gpu_memory_info
-        
-        # Get initial memory info
-        memory_info = get_gpu_memory_info()
-        if not memory_info or "nvidia_smi" not in memory_info:
-            if verbose:
-                print("Error: Could not get GPU memory info")
-            return {"success": False, "error": "Could not get GPU memory info"}
-        
-        # Get initial utilization
-        gpu_info = memory_info["nvidia_smi"][0]  # Use first GPU
-        initial_utilization = gpu_info["utilization"] / 100.0
-        current_utilization = initial_utilization
-        
+    from src.utils.jax_gpu_utils import get_gpu_memory_info
+
+    info = get_gpu_memory_info()
+    if not info.get("nvidia_smi"):
+        return {"success": False, "error": "nvidia-smi not found"}
+
+    gpu = info["nvidia_smi"][0]
+    total = gpu["total_memory_mb"]
+    used  = gpu["used_memory_mb"]
+    frac  = used / total
+
+    if verbose:
+        print(f"[alloc] initial used {used} MB  ({frac:.1%})  target {target_fraction:.0%}")
+
+    allocations = 0
+    while frac < target_fraction and allocations < max_steps:
+        if not force_memory_allocation(size_mb=step_size_mb, verbose=False):
+            break
+        allocations += 1
+        time.sleep(check_interval)
+        gpu = get_gpu_memory_info()["nvidia_smi"][0]
+        used = gpu["used_memory_mb"]
+        frac = used / total
         if verbose:
-            print(f"Initial GPU memory utilization: {initial_utilization:.2%}")
-            print(f"Target utilization: {target_fraction:.2%}")
-        
-        # Allocate in steps
-        allocations = []
-        for step in range(max_steps):
-            if current_utilization >= target_fraction:
-                if verbose:
-                    print(f"Target utilization reached: {current_utilization:.2%}")
-                break
-                
-            # Allocate one step
-            allocation_id = f"step_{step}"
-            success = force_memory_allocation(
-                size_mb=step_size_mb,
-                verbose=verbose,
-                keep_reference=True
-            )
-            
-            if not success:
-                if verbose:
-                    print(f"Allocation failed at step {step}")
-                break
-                
-            allocations.append(allocation_id)
-            
-            # Wait for memory status to stabilize
-            time.sleep(check_interval)
-            
-            # Check new utilization
-            memory_info = get_gpu_memory_info()
-            if memory_info and "nvidia_smi" in memory_info:
-                gpu_info = memory_info["nvidia_smi"][0]
-                current_utilization = gpu_info["utilization"] / 100.0
-                
-                if verbose:
-                    print(f"Step {step+1}: Utilization now {current_utilization:.2%}")
-        
-        return {
-            "success": True,
-            "initial_utilization": initial_utilization,
-            "final_utilization": current_utilization,
-            "target_reached": current_utilization >= target_fraction,
-            "steps_taken": len(allocations),
-            "memory_allocated_mb": len(allocations) * step_size_mb
-        }
-    except Exception as e:
-        if verbose:
-            print(f"Error in incremental allocation: {str(e)}")
-        return {"success": False, "error": str(e)}
+            print(f"[alloc] step {allocations}: {used} MB  ({frac:.1%})")
+
+    return {
+        "success": True,
+        "final_fraction": round(frac, 4),
+        "steps_taken": allocations,
+        "memory_allocated_mb": allocations * step_size_mb,
+    }
 
 def verify_gpu_usage(minimal_usage=0.1, operation_size=5000, verbose=True):
     """

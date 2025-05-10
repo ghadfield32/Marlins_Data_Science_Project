@@ -22,6 +22,12 @@ def jupyter(c, port=8888):
     c.run(f"jupyter lab --ip=0.0.0.0 --port={port} --no-browser --allow-root")
 
 @task
+def explainerdash(c, host="127.0.0.1", port=8050, debug=False):
+    """Launch the model explainer dashboard on the specified port."""
+    debug_flag = "--debug" if debug else ""
+    c.run(f"python src/run_explainer_dash.py --host {host} --port {port} {debug_flag}")
+
+@task
 def convert_to_parquet(c, csv_path="data/exit_velo_project_data.csv"):
     """Convert a CSV file to Parquet format for faster loading."""
     c.run(f"python3 -c \"import pandas as pd; \

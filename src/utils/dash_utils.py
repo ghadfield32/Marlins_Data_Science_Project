@@ -1,11 +1,12 @@
-
+from __future__ import annotations
 import dash
 from src.utils.dash_compat import patch_dropdown_right_once
 import pandas as pd
 import dash_bootstrap_components as dbc
 from explainerdashboard import RegressionExplainer, ExplainerDashboard
-from __future__ import annotations
 import socket, contextlib, time
+import numpy as np
+from src.utils.shap_utils import safe_shap_values
 
 def _in_notebook() -> bool:
     try:
@@ -30,78 +31,198 @@ def _get_free_port() -> int:
         s.bind(("", 0))
         return s.getsockname()[1]
 
+def patch_explainer_for_xgboost(explainer, X_df, debug=False):
+    """
+    Apply patches to the explainer to handle XGBoost SHAP value calculation issues.
+    
+    Parameters:
+    -----------
+    explainer : RegressionExplainer
+        The explainer to patch
+    X_df : pd.DataFrame
+        The feature dataframe
+    debug : bool, default=False
+        Whether to print debug information
+        
+    Returns:
+    --------
+    bool
+        True if patched successfully, False otherwise
+    """
+    try:
+        import shap
+        from types import MethodType
+        
+        # 1. Override the default get_shap_values_df method
+        def patched_get_shap_values_df(self, *args, **kwargs):
+            if debug:
+                print("Using patched get_shap_values_df method")
+            
+            if hasattr(self, '_shap_values_df') and self._shap_values_df is not None:
+                return self._shap_values_df
+            
+            # Extract the model from pipeline if needed
+            model = self.model
+            if hasattr(model, 'steps'):
+                model = model.steps[-1][1]
+            
+            # Use our safe implementation
+            shap_values, expected_value = safe_shap_values(
+                model, 
+                X_df,
+                max_features=min(100, X_df.shape[1]),
+                sample_size=min(1000, len(X_df))
+            )
+            
+            if shap_values is None:
+                if debug:
+                    print("Failed to calculate SHAP values, falling back to permutation importance")
+                # Fall back to permutation importance for feature importance
+                self._shap_values_df = None
+                return pd.DataFrame(0, index=X_df.index, columns=X_df.columns)
+            
+            if debug:
+                print(f"SHAP values shape: {np.array(shap_values).shape}")
+            
+            # Handle different explainer output formats
+            if hasattr(shap_values, 'values'):  # New SHAP output format
+                shap_df = pd.DataFrame(shap_values.values, columns=X_df.columns, index=X_df.index)
+            else:  # Old-style output
+                shap_df = pd.DataFrame(shap_values, columns=X_df.columns, index=X_df.index)
+            
+            # Cache the result
+            self._shap_values_df = shap_df
+            self.expected_value = expected_value
+            
+            return shap_df
+        
+        # 2. Apply the patch
+        explainer.get_shap_values_df = MethodType(patched_get_shap_values_df, explainer)
+        
+        if debug:
+            print("Successfully patched explainer for XGBoost compatibility")
+        return True
+        
+    except Exception as e:
+        if debug:
+            print(f"Failed to patch explainer: {e}")
+        return False
+
 def launch_explainer_dashboard(
     pipeline,
     preprocessor,
     X_raw: pd.DataFrame,
     y: pd.Series,
     *,
-    cats=None,
-    descriptions=None,
-    title: str = "Model Explainer",
-    bootstrap=dbc.themes.FLATLY,
-    inline: bool | None = None,
     host: str = "127.0.0.1",
     port: int = 8050,
+    debug: bool = False,
+    wait_for_ready: bool = False,
+    title: str = "Model Explainer",
     **db_kwargs,
-):
-    """Create & display an ExplainerDashboard.
-
-    • Inline in notebooks by default.  
-    • Auto-terminates any previous inline dashboard on the same port.  
-    • Falls back to a free port if the requested one is still busy.
+) -> tuple[str, int]:
     """
-    if inline is None:
-        inline = _in_notebook()
+    1. Finds a free port if needed
+    2. Prints debug logs at each step (if debug=True)
+    3. Prints final URL
+    4. Gracefully handles stale‐thread & DNS errors
+    Returns the (host, port) in use.
+    """
+    # --- PRE-STEP: Terminate any existing dashboard on this port ---
+    if debug:
+        print("[Pre-Step] Terminating any existing dashboard on port", port)
+    try:
+        ExplainerDashboard.terminate(port)
+        if debug:
+            print(f"[Pre-Step] Successfully terminated any previous dashboard on port {port}")
+        # Give the system a moment to fully release the port
+        time.sleep(0.5) 
+    except Exception as e:
+        if debug:
+            print(f"[Pre-Step] No existing dashboard to terminate or error: {e}")
 
-    # ---------- tidy up any existing inline server ----------
-    if inline and _port_in_use(host, port):
-        try:
-            ExplainerDashboard.terminate(port)
-        except Exception:             # pragma: no cover
-            pass                      # nothing running or unsupported version
-        # give the OS a moment to release the socket
-        for _ in range(10):
-            if not _port_in_use(host, port):
-                break
-            time.sleep(0.1)
-        else:                          # still busy after 1 s
-            port = _get_free_port()
+    # --- STEP 1: Port check ---
+    if debug:
+        print("[Step 1] Checking port availability…")
+    if _port_in_use(host, port):
+        if debug:
+            print(f"[Step 1] Port {port} still in use; grabbing a free port…")
+        port = _get_free_port()
+    if debug:
+        print(f"[Step 1] Using port: {port}")
 
-    # ---------- prepare dataset ----------
-    X_proc     = preprocessor.transform(X_raw)
+    # --- STEP 2: Data prep ---
+    if debug:
+        print("[Step 2] Preparing data…")
+    X_proc = preprocessor.transform(X_raw)
     feat_names = preprocessor.get_feature_names_out()
-    X_df       = pd.DataFrame(X_proc, columns=feat_names, index=X_raw.index)
+    X_df = pd.DataFrame(X_proc, columns=feat_names, index=X_raw.index)
+    if debug:
+        print(f"[Step 2] X_df shape: {X_df.shape}")
 
-    if cats:
-        cats = [c for c in cats if any(fn.startswith(f"{c}_") for fn in feat_names)]
+    # --- STEP 3: Explainer build & patch ---
+    if debug:
+        print("[Step 3] Building RegressionExplainer & patching for XGBoost…")
+    explainer = RegressionExplainer(pipeline, X_df, y, precision="float32")
+    patch_explainer_for_xgboost(explainer, X_df, debug=debug)
+    if debug:
+        print("[Step 3] Explainer ready. Merged cols:", len(explainer.merged_cols))
 
-    explainer = RegressionExplainer(
-        pipeline,
-        X_df,
-        y,
-        cats=cats or [],
-        descriptions=descriptions or {},
-        precision="float32",
+    # --- STEP 4: Tell the user the URL ---
+    url = f"http://{host}:{port}"
+    print(f"🔍  Dashboard URL → {url}")
+
+    # --- STEP 5: Launch with graceful error handling ---
+    if debug:
+        print("[Step 5] Launching ExplainerDashboard…")
+    dashboard = ExplainerDashboard(
+        explainer,
+        title=title,
+        bootstrap=dbc.themes.FLATLY,
+        mode="inline",
+        **db_kwargs,
     )
-    explainer.merged_cols = explainer.merged_cols.intersection(X_df.columns)
 
-    # ---------- launch dashboard ----------
-    if inline:
-        ExplainerDashboard(
-            explainer,
-            title=title,
-            bootstrap=bootstrap,
-            mode="inline",
-            **db_kwargs,
-        ).run(host=host, port=port)
-    else:
-        ExplainerDashboard(
-            explainer,
-            title=title,
-            bootstrap=bootstrap,
-            **db_kwargs,
-        ).run(host=host, port=port)
+    # Check if the run method supports wait_for_ready parameter
+    try:
+        # Inspect the run method signature to see if it supports wait_for_ready
+        from inspect import signature
+        run_params = signature(dashboard.run).parameters
+        supports_wait_for_ready = 'wait_for_ready' in run_params
+        
+        if debug and not supports_wait_for_ready and wait_for_ready:
+            print("[Warning] wait_for_ready parameter not supported in this version of explainerdashboard")
+    except Exception as e:
+        if debug:
+            print(f"[Note] Could not determine if wait_for_ready is supported: {e}")
+        supports_wait_for_ready = False
+
+    try:
+        # Run with wait_for_ready only if supported
+        if supports_wait_for_ready:
+            dashboard.run(host=host, port=port, wait_for_ready=wait_for_ready)
+        else:
+            dashboard.run(host=host, port=port)
+    except TypeError as e:
+        # stale-thread kill bug
+        if "NoneType" in str(e):
+            print("[Warning] Ignored stale-thread TypeError during restart.")
+            # Try to run again without wait_for_ready
+            dashboard.run(host=host, port=port)
+        else:
+            raise
+    except Exception as e:
+        # DNS / health-check bug
+        msg = str(e)
+        if "Name or service not known" in msg or "getaddrinfo" in msg:
+            print("[Warning] DNS resolution failed. Retrying without health check…")
+            dashboard.run(host=host, port=port)
+        else:
+            raise
+
+    # --- Return for programmatic use ---
+    return host, port
+
 
 
 
@@ -142,5 +263,7 @@ if __name__=="__main__":
         descriptions  = {c: c for c in preprocessor.get_feature_names_out()},
         whatif        = True,
         shap_interaction = False,
-        hide_wizard     = True
+        hide_wizard     = True,
+        debug           = True
     )
+

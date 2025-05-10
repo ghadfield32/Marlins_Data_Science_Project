@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>explainerdashboard</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div class="container">
+<div></div>
+<div>
+    <div>
+    
+<div class="row" style="margin-top: 20px;">
+    
+<div class="col">
+
+<div class="row row-cols-2 g-4" style="margin-top: 20px;">
+    
+<div class="col">
+
+<div class="card h-100" >
+  <div class="card-header"><h3 class="card-title">Model Summary</h3></div>
+  <div class="card-body">
+    <div class="w-100">
+    
+<div class="row" style="margin-top: 20px;">
+    
+<div class="col">
+
+<table class="table">
+  <thead>
+    <tr>
+      <th scope="col">metric</th>
+      <th scope="col">Score</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>mean-squared-error</td>
+      <td>119.436</td>
+    </tr>
+    <tr>
+      <td>root-mean-squared-error</td>
+      <td>10.929</td>
+    </tr>
+    <tr>
+      <td>mean-absolute-error</td>
+      <td>8.487</td>
+    </tr>
+    <tr>
+      <td>mean-absolute-percentage-error</td>
+      <td>0.093</td>
+    </tr>
+    <tr>
+      <td>R-squared</td>
+      <td>0.42</td>
+    </tr>
+
+  </tbody>
+</table>
+    
+</div>
+        
+</div> 
+    
+    </div>
+  </div>
+</div>
+
+</div>
+        
+<div class="col">
+
+<div class="card h-100" >
+  <div class="card-header"><h3 class="card-title">Predicted vs Actual</h3></div>
+  <div class="card-body">
+    <div class="w-100">
+    
+<div class="row" style="margin-top: 20px;">
+    
+<div class="col">
+<div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>                <div id="a5fbc5e9-34b7-4b59-95de-8f8e08304356" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("a5fbc5e9-34b7-4b59-95de-8f8e08304356")) {                    Plotly.newPlot(                        "a5fbc5e9-34b7-4b59-95de-8f8e08304356",                        [{"hoverinfo":"text","mode":"markers","name":"","text":["Index: 0\u003cbr\u003eObserved: 97.347\u003cbr\u003ePrediction: 98.465","Index: 1\u003cbr\u003eObserved: 65.646\u003cbr\u003ePrediction: 75.863","Index: 2\u003cbr\u003eObserved: 95.526\u003cbr\u003ePrediction: 75.669","Index: 3\u003cbr\u003eObserved: 98.282\u003cbr\u003ePrediction: 83.691","Index: 4\u003cbr\u003eObserved: 52.729\u003cbr\u003ePrediction: 60.720","Index: 5\u003cbr\u003eObserved: 96.171\u003cbr\u003ePrediction: 80.809","Index: 6\u003cbr\u003eObserved: 104.654\u003cbr\u003ePrediction: 89.274","Index: 7\u003cbr\u003eObserved: 90.595\u003cbr\u003ePrediction: 92.005","Index: 8\u003cbr\u003eObserved: 64.144\u003cbr\u003ePrediction: 63.004","Index: 9\u003cbr\u003eObserved: 107.783\u003cbr\u003ePrediction: 92.765","Index: 10\u003cbr\u003eObserved: 94.243\u003cbr\u003ePrediction: 88.466","Index: 11\u003cbr\u003eObserved: 81.208\u003cbr\u003ePrediction: 69.426","Index: 12\u003cbr\u003eObserved: 95.457\u003cbr\u003ePrediction: 101.550","Index: 13\u003cbr\u003eObserved: 88.939\u003cbr\u003ePrediction: 77.790","Index: 14\u003cbr\u003eObserved: 103.329\u003cbr\u003ePrediction: 93.822","Index: 15\u003cbr\u003eObserved: 98.539\u003cbr\u003ePrediction: 86.349","Index: 16\u003cbr\u003eObserved: 87.724\u003cbr\u003ePrediction: 90.138","Index: 17\u003cbr\u003eObserved: 98.818\u003cbr\u003ePrediction: 95.646","Index: 18\u003cbr\u003eObserved: 91.107\u003cbr\u003ePrediction: 88.835","Index: 19\u003cbr\u003eObserved: 98.930\u003cbr\u003ePrediction: 95.048","Index: 20\u003cbr\u003eObserved: 73.759\u003cbr\u003ePrediction: 78.310","Index: 21\u003cbr\u003eObserved: 91.517\u003cbr\u003ePrediction: 93.803","Index: 22\u003cbr\u003eObserved: 69.257\u003cbr\u003ePrediction: 55.453","Index: 23\u003cbr\u003eObserved: 105.051\u003cbr\u003ePrediction: 78.546","Index: 24\u003cbr\u003eObserved: 83.792\u003cbr\u003ePrediction: 75.643","Index: 25\u003cbr\u003eObserved: 93.091\u003cbr\u003ePrediction: 84.876","Index: 26\u003cbr\u003eObserved: 89.987\u003cbr\u003ePrediction: 90.210","Index: 27\u003cbr\u003eObserved: 94.751\u003cbr\u003ePrediction: 85.210","Index: 28\u003cbr\u003eObserved: 76.531\u003cbr\u003ePrediction: 83.371","Index: 29\u003cbr\u003eObserved: 52.716\u003cbr\u003ePrediction: 48.050","Index: 30\u003cbr\u003eObserved: 104.151\u003cbr\u003ePrediction: 97.598","Index: 31\u003cbr\u003eObserved: 77.016\u003cbr\u003ePrediction: 78.599","Index: 32\u003cbr\u003eObserved: 95.618\u003cbr\u003ePrediction: 87.528","Index: 33\u003cbr\u003eObserved: 109.657\u003cbr\u003ePrediction: 102.040","Index: 34\u003cbr\u003eObserved: 64.575\u003cbr\u003ePrediction: 59.406","Index: 35\u003cbr\u003eObserved: 105.158\u003cbr\u003ePrediction: 75.243","Index: 36\u003cbr\u003eObserved: 100.143\u003cbr\u003ePrediction: 84.482","Index: 37\u003cbr\u003eObserved: 82.821\u003cbr\u003ePrediction: 90.911","Index: 38\u003cbr\u003eObserved: 97.359\u003cbr\u003ePrediction: 99.820","Index: 39\u003cbr\u003eObserved: 105.757\u003cbr\u003ePrediction: 91.719","Index: 40\u003cbr\u003eObserved: 93.024\u003cbr\u003ePrediction: 70.929","Index: 41\u003cbr\u003eObserved: 102.566\u003cbr\u003ePrediction: 99.150","Index: 42\u003cbr\u003eObserved: 100.617\u003cbr\u003ePrediction: 80.208","Index: 43\u003cbr\u003eObserved: 71.782\u003cbr\u003ePrediction: 69.192","Index: 44\u003cbr\u003eObserved: 70.212\u003cbr\u003ePrediction: 70.001","Index: 45\u003cbr\u003eObserved: 84.576\u003cbr\u003ePrediction: 77.974","Index: 46\u003cbr\u003eObserved: 91.088\u003cbr\u003ePrediction: 81.632","Index: 47\u003cbr\u003eObserved: 71.242\u003cbr\u003ePrediction: 71.810","Index: 48\u003cbr\u003eObserved: 72.420\u003cbr\u003ePrediction: 75.227","Index: 49\u003cbr\u003eObserved: 99.066\u003cbr\u003ePrediction: 97.126"],"x":[97.34700012207031,65.64630126953125,95.52639770507812,98.28179931640625,52.72850036621094,96.17070007324219,104.65409851074219,90.59549713134766,64.14409637451172,107.78260040283203,94.2428970336914,81.20809936523438,95.4572982788086,88.9385986328125,103.32929992675781,98.53919982910156,87.72429656982422,98.81770324707031,91.10700225830078,98.9303970336914,73.75859832763672,91.51740264892578,69.25659942626953,105.05110168457031,83.7916030883789,93.09149932861328,89.98660278320312,94.7510986328125,76.53109741210938,52.7156982421875,104.15080261230469,77.01589965820312,95.61799621582031,109.65689849853516,64.57479858398438,105.15840148925781,100.14330291748047,82.8207015991211,97.35910034179688,105.75669860839844,93.02400207519531,102.56639862060547,100.61699676513672,71.7822036743164,70.21160125732422,84.57569885253906,91.08789825439453,71.24150085449219,72.4197006225586,99.06559753417969],"y":[98.465087890625,75.86257934570312,75.66885375976562,83.6907730102539,60.72012710571289,80.80874633789062,89.27439880371094,92.00508117675781,63.00370407104492,92.76455688476562,88.46614074707031,69.42586517333984,101.55012512207031,77.78958129882812,93.8221664428711,86.34895324707031,90.13764190673828,95.64562225341797,88.83489990234375,95.04759216308594,78.31007385253906,93.80279541015625,55.452667236328125,78.54638671875,75.64264678955078,84.87571716308594,90.20952606201172,85.21007537841797,83.37079620361328,48.05025100708008,97.59827423095703,78.59922790527344,87.52798461914062,102.04039764404297,59.4063835144043,75.24314880371094,84.4820327758789,90.91123962402344,99.82049560546875,91.71903228759766,70.92916107177734,99.14998626708984,80.207763671875,69.19184875488281,70.00144958496094,77.9742660522461,81.63189697265625,71.81019592285156,75.22721862792969,97.12620544433594],"type":"scattergl"},{"hoverinfo":"none","mode":"lines","name":"","x":[52.7156982421875,52.72850036621094,64.14409637451172,64.57479858398438,65.64630126953125,69.25659942626953,70.21160125732422,71.24150085449219,71.7822036743164,72.4197006225586,73.75859832763672,76.53109741210938,77.01589965820312,81.20809936523438,82.8207015991211,83.7916030883789,84.57569885253906,87.72429656982422,88.9385986328125,89.98660278320312,90.59549713134766,91.08789825439453,91.10700225830078,91.51740264892578,93.02400207519531,93.09149932861328,94.2428970336914,94.7510986328125,95.4572982788086,95.52639770507812,95.61799621582031,96.17070007324219,97.34700012207031,97.35910034179688,98.28179931640625,98.53919982910156,98.81770324707031,98.9303970336914,99.06559753417969,100.14330291748047,100.61699676513672,102.56639862060547,103.32929992675781,104.15080261230469,104.65409851074219,105.05110168457031,105.15840148925781,105.75669860839844,107.78260040283203,109.65689849853516],"y":[52.7156982421875,52.72850036621094,64.14409637451172,64.57479858398438,65.64630126953125,69.25659942626953,70.21160125732422,71.24150085449219,71.7822036743164,72.4197006225586,73.75859832763672,76.53109741210938,77.01589965820312,81.20809936523438,82.8207015991211,83.7916030883789,84.57569885253906,87.72429656982422,88.9385986328125,89.98660278320312,90.59549713134766,91.08789825439453,91.10700225830078,91.51740264892578,93.02400207519531,93.09149932861328,94.2428970336914,94.7510986328125,95.4572982788086,95.52639770507812,95.61799621582031,96.17070007324219,97.34700012207031,97.35910034179688,98.28179931640625,98.53919982910156,98.81770324707031,98.9303970336914,99.06559753417969,100.14330291748047,100.61699676513672,102.56639862060547,103.32929992675781,104.15080261230469,104.65409851074219,105.05110168457031,105.15840148925781,105.75669860839844,107.78260040283203,109.65689849853516],"type":"scattergl"}],                        {"hovermode":"closest","plot_bgcolor":"#fff","title":{"text":"Predicted exit_velo vs Observed exit_velo"},"xaxis":{"title":{"text":"Observed exit_velo"}},"yaxis":{"title":{"text":"Predicted exit_velo"}},"template":{"data":{"scatter":[{"type":"scatter"}]}},"margin":{"t":40,"b":40,"l":40,"r":40}},                        {"responsive": true}                    )                };                            </script>        </div>
+</div>
+        
+</div> 
+    
+    </div>
+  </div>
+</div>
+
+</div>
+        
+</div> 
+    
+</div>
+        
+</div> 
+        </div><div>
+<div class="row" style="margin-top: 20px;">
+    
+<div class="col">
+
+<div class="row row-cols-2 g-4" style="margin-top: 20px;">
+    
+<div class="col">
+
+<div class="card h-100" >
+  <div class="card-header"><h3 class="card-title">Residuals</h3></div>
+  <div class="card-body">
+    <div class="w-100">
+    
+<div class="row" style="margin-top: 20px;">
+    
+<div class="col">
+<div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>                <div id="8cda97e9-d436-47c0-be75-f3608b4e1905" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("8cda97e9-d436-47c0-be75-f3608b4e1905")) {                    Plotly.newPlot(                        "8cda97e9-d436-47c0-be75-f3608b4e1905",                        [{"hoverinfo":"text","mode":"markers","name":"residuals (y-preds)","text":["Index: 0\u003cbr\u003eObserved: 97.347\u003cbr\u003ePrediction: 98.465\u003cbr\u003eResidual: -1.118","Index: 1\u003cbr\u003eObserved: 65.646\u003cbr\u003ePrediction: 75.863\u003cbr\u003eResidual: -10.216","Index: 2\u003cbr\u003eObserved: 95.526\u003cbr\u003ePrediction: 75.669\u003cbr\u003eResidual: 19.858","Index: 3\u003cbr\u003eObserved: 98.282\u003cbr\u003ePrediction: 83.691\u003cbr\u003eResidual: 14.591","Index: 4\u003cbr\u003eObserved: 52.729\u003cbr\u003ePrediction: 60.720\u003cbr\u003eResidual: -7.992","Index: 5\u003cbr\u003eObserved: 96.171\u003cbr\u003ePrediction: 80.809\u003cbr\u003eResidual: 15.362","Index: 6\u003cbr\u003eObserved: 104.654\u003cbr\u003ePrediction: 89.274\u003cbr\u003eResidual: 15.380","Index: 7\u003cbr\u003eObserved: 90.595\u003cbr\u003ePrediction: 92.005\u003cbr\u003eResidual: -1.410","Index: 8\u003cbr\u003eObserved: 64.144\u003cbr\u003ePrediction: 63.004\u003cbr\u003eResidual: 1.140","Index: 9\u003cbr\u003eObserved: 107.783\u003cbr\u003ePrediction: 92.765\u003cbr\u003eResidual: 15.018","Index: 10\u003cbr\u003eObserved: 94.243\u003cbr\u003ePrediction: 88.466\u003cbr\u003eResidual: 5.777","Index: 11\u003cbr\u003eObserved: 81.208\u003cbr\u003ePrediction: 69.426\u003cbr\u003eResidual: 11.782","Index: 12\u003cbr\u003eObserved: 95.457\u003cbr\u003ePrediction: 101.550\u003cbr\u003eResidual: -6.093","Index: 13\u003cbr\u003eObserved: 88.939\u003cbr\u003ePrediction: 77.790\u003cbr\u003eResidual: 11.149","Index: 14\u003cbr\u003eObserved: 103.329\u003cbr\u003ePrediction: 93.822\u003cbr\u003eResidual: 9.507","Index: 15\u003cbr\u003eObserved: 98.539\u003cbr\u003ePrediction: 86.349\u003cbr\u003eResidual: 12.190","Index: 16\u003cbr\u003eObserved: 87.724\u003cbr\u003ePrediction: 90.138\u003cbr\u003eResidual: -2.413","Index: 17\u003cbr\u003eObserved: 98.818\u003cbr\u003ePrediction: 95.646\u003cbr\u003eResidual: 3.172","Index: 18\u003cbr\u003eObserved: 91.107\u003cbr\u003ePrediction: 88.835\u003cbr\u003eResidual: 2.272","Index: 19\u003cbr\u003eObserved: 98.930\u003cbr\u003ePrediction: 95.048\u003cbr\u003eResidual: 3.883","Index: 20\u003cbr\u003eObserved: 73.759\u003cbr\u003ePrediction: 78.310\u003cbr\u003eResidual: -4.551","Index: 21\u003cbr\u003eObserved: 91.517\u003cbr\u003ePrediction: 93.803\u003cbr\u003eResidual: -2.285","Index: 22\u003cbr\u003eObserved: 69.257\u003cbr\u003ePrediction: 55.453\u003cbr\u003eResidual: 13.804","Index: 23\u003cbr\u003eObserved: 105.051\u003cbr\u003ePrediction: 78.546\u003cbr\u003eResidual: 26.505","Index: 24\u003cbr\u003eObserved: 83.792\u003cbr\u003ePrediction: 75.643\u003cbr\u003eResidual: 8.149","Index: 25\u003cbr\u003eObserved: 93.091\u003cbr\u003ePrediction: 84.876\u003cbr\u003eResidual: 8.216","Index: 26\u003cbr\u003eObserved: 89.987\u003cbr\u003ePrediction: 90.210\u003cbr\u003eResidual: -0.223","Index: 27\u003cbr\u003eObserved: 94.751\u003cbr\u003ePrediction: 85.210\u003cbr\u003eResidual: 9.541","Index: 28\u003cbr\u003eObserved: 76.531\u003cbr\u003ePrediction: 83.371\u003cbr\u003eResidual: -6.840","Index: 29\u003cbr\u003eObserved: 52.716\u003cbr\u003ePrediction: 48.050\u003cbr\u003eResidual: 4.665","Index: 30\u003cbr\u003eObserved: 104.151\u003cbr\u003ePrediction: 97.598\u003cbr\u003eResidual: 6.553","Index: 31\u003cbr\u003eObserved: 77.016\u003cbr\u003ePrediction: 78.599\u003cbr\u003eResidual: -1.583","Index: 32\u003cbr\u003eObserved: 95.618\u003cbr\u003ePrediction: 87.528\u003cbr\u003eResidual: 8.090","Index: 33\u003cbr\u003eObserved: 109.657\u003cbr\u003ePrediction: 102.040\u003cbr\u003eResidual: 7.617","Index: 34\u003cbr\u003eObserved: 64.575\u003cbr\u003ePrediction: 59.406\u003cbr\u003eResidual: 5.168","Index: 35\u003cbr\u003eObserved: 105.158\u003cbr\u003ePrediction: 75.243\u003cbr\u003eResidual: 29.915","Index: 36\u003cbr\u003eObserved: 100.143\u003cbr\u003ePrediction: 84.482\u003cbr\u003eResidual: 15.661","Index: 37\u003cbr\u003eObserved: 82.821\u003cbr\u003ePrediction: 90.911\u003cbr\u003eResidual: -8.091","Index: 38\u003cbr\u003eObserved: 97.359\u003cbr\u003ePrediction: 99.820\u003cbr\u003eResidual: -2.461","Index: 39\u003cbr\u003eObserved: 105.757\u003cbr\u003ePrediction: 91.719\u003cbr\u003eResidual: 14.038","Index: 40\u003cbr\u003eObserved: 93.024\u003cbr\u003ePrediction: 70.929\u003cbr\u003eResidual: 22.095","Index: 41\u003cbr\u003eObserved: 102.566\u003cbr\u003ePrediction: 99.150\u003cbr\u003eResidual: 3.416","Index: 42\u003cbr\u003eObserved: 100.617\u003cbr\u003ePrediction: 80.208\u003cbr\u003eResidual: 20.409","Index: 43\u003cbr\u003eObserved: 71.782\u003cbr\u003ePrediction: 69.192\u003cbr\u003eResidual: 2.590","Index: 44\u003cbr\u003eObserved: 70.212\u003cbr\u003ePrediction: 70.001\u003cbr\u003eResidual: 0.210","Index: 45\u003cbr\u003eObserved: 84.576\u003cbr\u003ePrediction: 77.974\u003cbr\u003eResidual: 6.601","Index: 46\u003cbr\u003eObserved: 91.088\u003cbr\u003ePrediction: 81.632\u003cbr\u003eResidual: 9.456","Index: 47\u003cbr\u003eObserved: 71.242\u003cbr\u003ePrediction: 71.810\u003cbr\u003eResidual: -0.569","Index: 48\u003cbr\u003eObserved: 72.420\u003cbr\u003ePrediction: 75.227\u003cbr\u003eResidual: -2.808","Index: 49\u003cbr\u003eObserved: 99.066\u003cbr\u003ePrediction: 97.126\u003cbr\u003eResidual: 1.939"],"x":[98.465087890625,75.86257934570312,75.66885375976562,83.6907730102539,60.72012710571289,80.80874633789062,89.27439880371094,92.00508117675781,63.00370407104492,92.76455688476562,88.46614074707031,69.42586517333984,101.55012512207031,77.78958129882812,93.8221664428711,86.34895324707031,90.13764190673828,95.64562225341797,88.83489990234375,95.04759216308594,78.31007385253906,93.80279541015625,55.452667236328125,78.54638671875,75.64264678955078,84.87571716308594,90.20952606201172,85.21007537841797,83.37079620361328,48.05025100708008,97.59827423095703,78.59922790527344,87.52798461914062,102.04039764404297,59.4063835144043,75.24314880371094,84.4820327758789,90.91123962402344,99.82049560546875,91.71903228759766,70.92916107177734,99.14998626708984,80.207763671875,69.19184875488281,70.00144958496094,77.9742660522461,81.63189697265625,71.81019592285156,75.22721862792969,97.12620544433594],"y":[-1.1180877685546875,-10.216278076171875,19.8575439453125,14.591026306152344,-7.991626739501953,15.361953735351562,15.37969970703125,-1.4095840454101562,1.1403923034667969,15.018043518066406,5.776756286621094,11.782234191894531,-6.092826843261719,11.149017333984375,9.507133483886719,12.19024658203125,-2.4133453369140625,3.1720809936523438,2.2721023559570312,3.8828048706054688,-4.551475524902344,-2.2853927612304688,13.803932189941406,26.504714965820312,8.148956298828125,8.215782165527344,-0.22292327880859375,9.541023254394531,-6.839698791503906,4.665447235107422,6.552528381347656,-1.5833282470703125,8.090011596679688,7.6165008544921875,5.168415069580078,29.915252685546875,15.661270141601562,-8.090538024902344,-2.461395263671875,14.037666320800781,22.09484100341797,3.416412353515625,20.40923309326172,2.5903549194335938,0.21015167236328125,6.601432800292969,9.456001281738281,-0.568695068359375,-2.8075180053710938,1.93939208984375],"type":"scattergl"},{"hoverinfo":"none","mode":"lines","name":"","x":[98.465087890625,75.86257934570312,75.66885375976562,83.6907730102539,60.72012710571289,80.80874633789062,89.27439880371094,92.00508117675781,63.00370407104492,92.76455688476562,88.46614074707031,69.42586517333984,101.55012512207031,77.78958129882812,93.8221664428711,86.34895324707031,90.13764190673828,95.64562225341797,88.83489990234375,95.04759216308594,78.31007385253906,93.80279541015625,55.452667236328125,78.54638671875,75.64264678955078,84.87571716308594,90.20952606201172,85.21007537841797,83.37079620361328,48.05025100708008,97.59827423095703,78.59922790527344,87.52798461914062,102.04039764404297,59.4063835144043,75.24314880371094,84.4820327758789,90.91123962402344,99.82049560546875,91.71903228759766,70.92916107177734,99.14998626708984,80.207763671875,69.19184875488281,70.00144958496094,77.9742660522461,81.63189697265625,71.81019592285156,75.22721862792969,97.12620544433594],"y":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"type":"scattergl"}],                        {"hovermode":"closest","plot_bgcolor":"#fff","title":{"text":"Residuals vs predicted exit_velo"},"xaxis":{"title":{"text":""}},"yaxis":{"title":{"text":"residuals (y-preds)"}},"template":{"data":{"scatter":[{"type":"scatter"}]}},"margin":{"t":40,"b":40,"l":40,"r":40}},                        {"responsive": true}                    )                };                            </script>        </div>
+</div>
+        
+</div> 
+    
+    </div>
+  </div>
+</div>
+
+</div>
+        
+<div class="col">
+
+<div class="card h-100" >
+  <div class="card-header"><h3 class="card-title">Plot vs feature</h3><h6 class="card-subtitle">Are predictions and residuals correlated with features?</h6></div>
+  <div class="card-body">
+    <div class="w-100">
+    
+<div class="row" style="margin-top: 20px;">
+    
+<div class="col">
+<div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>                <div id="582b9430-a9a6-4ed1-8bcc-49fa6464dca2" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("582b9430-a9a6-4ed1-8bcc-49fa6464dca2")) {                    Plotly.newPlot(                        "582b9430-a9a6-4ed1-8bcc-49fa6464dca2",                        [{"hoverinfo":"text","mode":"markers","name":"residuals (y-preds)","text":["Index: 0\u003cbr\u003eActual: 97.347\u003cbr\u003ePrediction: 98.465\u003cbr\u003eResidual: -1.118","Index: 1\u003cbr\u003eActual: 65.646\u003cbr\u003ePrediction: 75.863\u003cbr\u003eResidual: -10.216","Index: 2\u003cbr\u003eActual: 95.526\u003cbr\u003ePrediction: 75.669\u003cbr\u003eResidual: 19.858","Index: 3\u003cbr\u003eActual: 98.282\u003cbr\u003ePrediction: 83.691\u003cbr\u003eResidual: 14.591","Index: 4\u003cbr\u003eActual: 52.729\u003cbr\u003ePrediction: 60.720\u003cbr\u003eResidual: -7.992","Index: 5\u003cbr\u003eActual: 96.171\u003cbr\u003ePrediction: 80.809\u003cbr\u003eResidual: 15.362","Index: 6\u003cbr\u003eActual: 104.654\u003cbr\u003ePrediction: 89.274\u003cbr\u003eResidual: 15.380","Index: 7\u003cbr\u003eActual: 90.595\u003cbr\u003ePrediction: 92.005\u003cbr\u003eResidual: -1.410","Index: 8\u003cbr\u003eActual: 64.144\u003cbr\u003ePrediction: 63.004\u003cbr\u003eResidual: 1.140","Index: 9\u003cbr\u003eActual: 107.783\u003cbr\u003ePrediction: 92.765\u003cbr\u003eResidual: 15.018","Index: 10\u003cbr\u003eActual: 94.243\u003cbr\u003ePrediction: 88.466\u003cbr\u003eResidual: 5.777","Index: 11\u003cbr\u003eActual: 81.208\u003cbr\u003ePrediction: 69.426\u003cbr\u003eResidual: 11.782","Index: 12\u003cbr\u003eActual: 95.457\u003cbr\u003ePrediction: 101.550\u003cbr\u003eResidual: -6.093","Index: 13\u003cbr\u003eActual: 88.939\u003cbr\u003ePrediction: 77.790\u003cbr\u003eResidual: 11.149","Index: 14\u003cbr\u003eActual: 103.329\u003cbr\u003ePrediction: 93.822\u003cbr\u003eResidual: 9.507","Index: 15\u003cbr\u003eActual: 98.539\u003cbr\u003ePrediction: 86.349\u003cbr\u003eResidual: 12.190","Index: 16\u003cbr\u003eActual: 87.724\u003cbr\u003ePrediction: 90.138\u003cbr\u003eResidual: -2.413","Index: 17\u003cbr\u003eActual: 98.818\u003cbr\u003ePrediction: 95.646\u003cbr\u003eResidual: 3.172","Index: 18\u003cbr\u003eActual: 91.107\u003cbr\u003ePrediction: 88.835\u003cbr\u003eResidual: 2.272","Index: 19\u003cbr\u003eActual: 98.930\u003cbr\u003ePrediction: 95.048\u003cbr\u003eResidual: 3.883","Index: 20\u003cbr\u003eActual: 73.759\u003cbr\u003ePrediction: 78.310\u003cbr\u003eResidual: -4.551","Index: 21\u003cbr\u003eActual: 91.517\u003cbr\u003ePrediction: 93.803\u003cbr\u003eResidual: -2.285","Index: 22\u003cbr\u003eActual: 69.257\u003cbr\u003ePrediction: 55.453\u003cbr\u003eResidual: 13.804","Index: 23\u003cbr\u003eActual: 105.051\u003cbr\u003ePrediction: 78.546\u003cbr\u003eResidual: 26.505","Index: 24\u003cbr\u003eActual: 83.792\u003cbr\u003ePrediction: 75.643\u003cbr\u003eResidual: 8.149","Index: 25\u003cbr\u003eActual: 93.091\u003cbr\u003ePrediction: 84.876\u003cbr\u003eResidual: 8.216","Index: 26\u003cbr\u003eActual: 89.987\u003cbr\u003ePrediction: 90.210\u003cbr\u003eResidual: -0.223","Index: 27\u003cbr\u003eActual: 94.751\u003cbr\u003ePrediction: 85.210\u003cbr\u003eResidual: 9.541","Index: 28\u003cbr\u003eActual: 76.531\u003cbr\u003ePrediction: 83.371\u003cbr\u003eResidual: -6.840","Index: 29\u003cbr\u003eActual: 52.716\u003cbr\u003ePrediction: 48.050\u003cbr\u003eResidual: 4.665","Index: 30\u003cbr\u003eActual: 104.151\u003cbr\u003ePrediction: 97.598\u003cbr\u003eResidual: 6.553","Index: 31\u003cbr\u003eActual: 77.016\u003cbr\u003ePrediction: 78.599\u003cbr\u003eResidual: -1.583","Index: 32\u003cbr\u003eActual: 95.618\u003cbr\u003ePrediction: 87.528\u003cbr\u003eResidual: 8.090","Index: 33\u003cbr\u003eActual: 109.657\u003cbr\u003ePrediction: 102.040\u003cbr\u003eResidual: 7.617","Index: 34\u003cbr\u003eActual: 64.575\u003cbr\u003ePrediction: 59.406\u003cbr\u003eResidual: 5.168","Index: 35\u003cbr\u003eActual: 105.158\u003cbr\u003ePrediction: 75.243\u003cbr\u003eResidual: 29.915","Index: 36\u003cbr\u003eActual: 100.143\u003cbr\u003ePrediction: 84.482\u003cbr\u003eResidual: 15.661","Index: 37\u003cbr\u003eActual: 82.821\u003cbr\u003ePrediction: 90.911\u003cbr\u003eResidual: -8.091","Index: 38\u003cbr\u003eActual: 97.359\u003cbr\u003ePrediction: 99.820\u003cbr\u003eResidual: -2.461","Index: 39\u003cbr\u003eActual: 105.757\u003cbr\u003ePrediction: 91.719\u003cbr\u003eResidual: 14.038","Index: 40\u003cbr\u003eActual: 93.024\u003cbr\u003ePrediction: 70.929\u003cbr\u003eResidual: 22.095","Index: 41\u003cbr\u003eActual: 102.566\u003cbr\u003ePrediction: 99.150\u003cbr\u003eResidual: 3.416","Index: 42\u003cbr\u003eActual: 100.617\u003cbr\u003ePrediction: 80.208\u003cbr\u003eResidual: 20.409","Index: 43\u003cbr\u003eActual: 71.782\u003cbr\u003ePrediction: 69.192\u003cbr\u003eResidual: 2.590","Index: 44\u003cbr\u003eActual: 70.212\u003cbr\u003ePrediction: 70.001\u003cbr\u003eResidual: 0.210","Index: 45\u003cbr\u003eActual: 84.576\u003cbr\u003ePrediction: 77.974\u003cbr\u003eResidual: 6.601","Index: 46\u003cbr\u003eActual: 91.088\u003cbr\u003ePrediction: 81.632\u003cbr\u003eResidual: 9.456","Index: 47\u003cbr\u003eActual: 71.242\u003cbr\u003ePrediction: 71.810\u003cbr\u003eResidual: -0.569","Index: 48\u003cbr\u003eActual: 72.420\u003cbr\u003ePrediction: 75.227\u003cbr\u003eResidual: -2.808","Index: 49\u003cbr\u003eActual: 99.066\u003cbr\u003ePrediction: 97.126\u003cbr\u003eResidual: 1.939"],"x":[1.147645504341131,-1.0767642346076185,-0.623629069502981,1.0189102184587977,-1.0647942749579227,-0.8637268982741195,0.5749038941764967,1.5003634204000702,0.0720724374523043,0.13653323183043337,-1.0347529365374795,-1.044859867447923,1.7011979184914667,-0.6234893423475372,-1.064235366336147,-0.19434067226077278,1.188911590915569,1.412381888188881,1.1558894065123222,0.5363391992739742,1.0325569039738207,0.8957174430757403,-0.42661378032705166,-0.8538994216745637,0.48734154343163905,-1.0608353388870115,1.2731670656482539,-0.49000333318011075,-1.0471886533719885,-1.0705230883311232,0.5742518341177582,-1.0614873989457498,0.8216154749719807,1.2764739416604265,-1.0478407134307268,-0.9931608199336722,-0.26038504106726634,0.5634462674300951,1.8285359328193607,-1.0432297173010774,-1.0748080544314038,1.3402361002613363,-0.21711619859813197,-0.8055538258909669,-0.6878569852887036,0.9535644854295239,-1.0636764577143711,0.6919952504385029,-0.7023886094548715,1.405442106135166],"y":[-1.1180877685546875,-10.216278076171875,19.8575439453125,14.591026306152344,-7.991626739501953,15.361953735351562,15.37969970703125,-1.4095840454101562,1.1403923034667969,15.018043518066406,5.776756286621094,11.782234191894531,-6.092826843261719,11.149017333984375,9.507133483886719,12.19024658203125,-2.4133453369140625,3.1720809936523438,2.2721023559570312,3.8828048706054688,-4.551475524902344,-2.2853927612304688,13.803932189941406,26.504714965820312,8.148956298828125,8.215782165527344,-0.22292327880859375,9.541023254394531,-6.839698791503906,4.665447235107422,6.552528381347656,-1.5833282470703125,8.090011596679688,7.6165008544921875,5.168415069580078,29.915252685546875,15.661270141601562,-8.090538024902344,-2.461395263671875,14.037666320800781,22.09484100341797,3.416412353515625,20.40923309326172,2.5903549194335938,0.21015167236328125,6.601432800292969,9.456001281738281,-0.568695068359375,-2.8075180053710938,1.93939208984375],"type":"scattergl"},{"hoverinfo":"none","mode":"lines","name":"hangtime","x":[1.147645504341131,-1.0767642346076185,-0.623629069502981,1.0189102184587977,-1.0647942749579227,-0.8637268982741195,0.5749038941764967,1.5003634204000702,0.0720724374523043,0.13653323183043337,-1.0347529365374795,-1.044859867447923,1.7011979184914667,-0.6234893423475372,-1.064235366336147,-0.19434067226077278,1.188911590915569,1.412381888188881,1.1558894065123222,0.5363391992739742,1.0325569039738207,0.8957174430757403,-0.42661378032705166,-0.8538994216745637,0.48734154343163905,-1.0608353388870115,1.2731670656482539,-0.49000333318011075,-1.0471886533719885,-1.0705230883311232,0.5742518341177582,-1.0614873989457498,0.8216154749719807,1.2764739416604265,-1.0478407134307268,-0.9931608199336722,-0.26038504106726634,0.5634462674300951,1.8285359328193607,-1.0432297173010774,-1.0748080544314038,1.3402361002613363,-0.21711619859813197,-0.8055538258909669,-0.6878569852887036,0.9535644854295239,-1.0636764577143711,0.6919952504385029,-0.7023886094548715,1.405442106135166],"y":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"type":"scattergl"}],                        {"hovermode":"closest","plot_bgcolor":"#fff","title":{"text":"Residuals vs hangtime"},"xaxis":{"title":{"text":"hangtime value"}},"yaxis":{"title":{"text":"residuals (y-preds)"},"range":[-10.216278076171875,29.915252685546875]},"template":{"data":{"scatter":[{"type":"scatter"}]}},"margin":{"t":40,"b":40,"l":40,"r":40}},                        {"responsive": true}                    )                };                            </script>        </div>
+</div>
+        
+</div> 
+    
+    </div>
+  </div>
+</div>
+
+</div>
+        
+</div> 
+    
+</div>
+        
+</div> 
+    
+    </div>
+</div>
+    
+</div>
+
+</body>
+
+<script type="text/javascript">
+window.dispatchEvent(new Event('resize'));
+</script>
+        
+</html>
+    
