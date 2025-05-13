@@ -63,8 +63,7 @@ dependencies:
   - cmdstanpy>=1.2           # Stan front-end :contentReference[oaicite:5]{index=5}
   - cmdstan>=2.36            # CmdStan C++ backend :contentReference[oaicite:6]{index=6}
   - tensorflow-probability   # Probabilistic methods on TF :contentReference[oaicite:8]{index=8}
-  - tensorflow>=2.16         # Required for TFP :contentReference[oaicite:9]{index=9}
-  - tf-keras>=2.18.0 
+
 
   # Ensure pip is available
   - pip
@@ -80,3 +79,7 @@ dependencies:
     - pretty_errors
     - gdown
     - invoke>=2.2
+    # - tensorflow>=2.16         # Required for TFP :contentReference[oaicite:9]{index=9}
+    # - tf-keras>=2.18.0 
+    - tf-nightly
+    - tf-keras-nightly

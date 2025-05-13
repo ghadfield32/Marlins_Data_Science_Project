@@ -51,7 +51,7 @@ def filter_and_clip(
     Clean the dataset by:
     1. Filtering out bunts and popups
     2. Clipping extreme exit velocity values
-
+    
     Parameters
     ----------
     df : pd.DataFrame
@@ -64,7 +64,7 @@ def filter_and_clip(
         Quantiles to use if computing bounds from data
     debug : bool, optional
         Whether to print diagnostic information
-
+        
     Returns
     -------
     pd.DataFrame
@@ -74,10 +74,10 @@ def filter_and_clip(
     """
     cols = _ColumnSchema()
     TARGET = cols.target()
-
+    
     # 1. Filter out bunts and popups
     df = filter_bunts_and_popups(df, debug=debug)
-
+    
     # 2. Compute bounds if not provided
     if lower is None or upper is None:
         lower_computed, upper_computed = compute_clip_bounds(
@@ -85,7 +85,7 @@ def filter_and_clip(
         )
         lower = lower if lower is not None else lower_computed
         upper = upper if upper is not None else upper_computed
-
+    
     # 3. Clip extreme values
     df = clip_extreme_ev(df, lower=lower, upper=upper, debug=debug)
 
@@ -98,7 +98,7 @@ def filter_and_clip(
         hang_col="hangtime",
         velo_col="exit_velo",
         debug=debug)
-
+    
     return df, (lower, upper)
 
 # ───────────────────────────────────────────────────────────────────────
@@ -197,14 +197,14 @@ def transform_preprocessor(
 ) -> tuple[np.ndarray, pd.Series]:
     """
     Transform new data using a fitted preprocessor.
-
+    
     Parameters
     ----------
     df : pd.DataFrame
         New data to transform
     transformer : ColumnTransformer
         Fitted transformer from fit_preprocessor
-
+        
     Returns
     -------
     X_mat : np.ndarray
@@ -334,7 +334,25 @@ def prepare_for_mixed_and_hierarchical(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
+def prepare_for_pymc(df: pd.DataFrame,
+                     predictor: str,
+                     target: str) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    """
+    1) Domain-clean with filter_and_clip
+    2) Drop any rows where predictor or target is NaN
+    3) Return (clean_df, x_array, y_array)
+    """
+    # 1) domain cleaning + clipping
+    df_clean, _bounds = filter_and_clip(df.copy(), debug=False)
 
+    # 2) drop rows with missing predictor or target
+    df_clean = df_clean.dropna(subset=[predictor, target]).reset_index(drop=True)
+
+    # 3) extract numpy arrays
+    x = df_clean[predictor].values
+    y = df_clean[target].values
+
+    return df_clean, x, y
 
 
 
