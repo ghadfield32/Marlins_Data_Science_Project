@@ -88,102 +88,67 @@ def simplified_prepare_validation(df_val: pd.DataFrame, median_age: float, verbo
     return df_val
 
 
-
 def predict_from_summaries(
-    *,
     roster_csv: Path,
-    raw_csv: Path,
+    raw_csv:    Path,
     posterior_parquet: Path,
     global_effects_json: Path,
     output_csv: Path,
     verbose: bool = False,
-    level_idx: int = 2,  # allow override if you ever want a different level
+    level_idx: int = 2
 ) -> pd.DataFrame:
-    # --- 1) Load artefacts ------------------------------------------------
-    df_post   = pd.read_parquet(posterior_parquet)
-    df_roster = pd.read_csv(roster_csv)
-    df_raw    = pd.read_csv(raw_csv)
+    """
+    1) Load your roster (one row per batter for the upcoming season)
+    2) Load the per-batter random‐effects summary
+    3) Load the global effects JSON
+    4) Assemble predicted means + intervals
+    """
+    import pandas as pd, json
 
-    # --- 2) Load & validate global effects -------------------------------
-    try:
-        glob = json.loads(global_effects_json.read_text())
-    except FileNotFoundError:
-        raise ValueError(f"Global-effects file {global_effects_json} not found")
+    # ── 1) Read in
+    roster = pd.read_csv(roster_csv)
+    summary = pd.read_parquet(posterior_parquet)
 
-    if not glob:
-        raise ValueError(
-            f"{global_effects_json} is empty – missing Intercept/beta_age/beta_level"
-        )
+    # ── 2) Load the globals
+    globals_ = json.loads(global_effects_json.read_text())
 
-    # --- 2a) Inspect beta_level representation (for debugging) -----------
-    raw_bl = glob.get("beta_level", None)
     if verbose:
-        print(f"[Debug] loaded beta_level of type {type(raw_bl).__name__}: {raw_bl}")
+        print(f"[Debug] roster columns:  {roster.columns.tolist()}")
+        print(f"[Debug] summary columns: {summary.columns.tolist()}")
 
-    # --- 2b) Robust retrieval of beta_level -----------------------------
-    if isinstance(raw_bl, dict):
-        # dict may use string keys or possibly int keys
-        beta_level = raw_bl.get(str(level_idx),
-                        raw_bl.get(level_idx, 0.0))
-    elif isinstance(raw_bl, (list, tuple)):
-        # list index
-        try:
-            beta_level = raw_bl[level_idx]
-        except (IndexError, TypeError):
-            beta_level = 0.0
-    else:
-        # unrecognized format
-        beta_level = 0.0
+    # ── 3) Merge in the random-effects
+    #     (one row per batter_id in `summary`)
+    df = roster.merge(
+        summary,
+        on="batter_id",
+        how="left"
+    )
+    if verbose:
+        print("[Debug] after merge df.columns:", df.columns.tolist())
 
-    # pull the rest
-    post_mu  = glob.get("mu_mean",    0.0)
-    beta_age = glob.get("beta_age",    0.0)
-    med_age  = glob.get(
-        "median_age",
-        float(df_raw.get('age', pd.Series()).median() or 0.0)
+    # ── 4) Compute contributions
+    df["contrib_age"]   = globals_["beta_age"] * (
+        df["age"] - globals_["median_age"]
+    )
+    df["contrib_level"] = globals_.get("beta_level", 0.0) * df["level_idx"]
+    df["contrib_u"]     = df["u_q50"].fillna(0.0)
+
+    # ── 5) Predicted mean
+    df["pred_mean"] = (
+        globals_["alpha"]
+        + df["contrib_level"]
+        + df["contrib_age"]
+        + df["contrib_u"]
     )
 
-    # --- 3) Feature engineering (unchanged) ------------------------------
-    df_fe = feature_engineer(df_raw)
-    mapping = (
-        df_fe[df_fe['season']==2023][['batter_id','hitter_type']]
-             .dropna()
-             .groupby('batter_id')['hitter_type']
-             .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0])
-             .to_dict()
-    )
-    df_roster['hitter_type'] = df_roster['batter_id'].map(mapping).fillna("UNKNOWN")
+    # ── 6) Confidence intervals (add the u‐quantiles)
+    df["pred_lo95"] = df["pred_mean"] + df["u_q2.5"].fillna(0.0)
+    df["pred_hi95"] = df["pred_mean"] + df["u_q97.5"].fillna(0.0)
 
-    # --- 4) Validation prep & merge --------------------------------------
-    df_val = simplified_prepare_validation(df_roster, med_age, verbose)
-    df_val['batter_idx'] = align_batter_codes(df_val, df_post['batter_idx'])
-    df = df_val.merge(df_post, on='batter_idx', how='left')
-
-    # --- 5) Compute contributions & predictions --------------------------
-    df['contrib_age']   = beta_age   * df['age_centered']
-    df['contrib_level'] = beta_level
-    df['contrib_u']     = df['u_q50']
-
-    df['pred_mean'] = post_mu + (
-        df['contrib_age'] + df['contrib_level'] + df['contrib_u']
-    )
-    df['pred_lo95'] = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q2.5']
-    df['pred_hi95'] = post_mu + df['contrib_age'] + df['contrib_level'] + df['u_q97.5']
-
-    # --- 6) Persist with auto-mkdir + locked column order ---------------
+    # ── 7) Write & return
     output_csv.parent.mkdir(parents=True, exist_ok=True)
-    cols = [
-        "season","batter_id","age","hitter_type","level_idx","age_centered",
-        "batter_idx","u_q2.5","u_q50","u_q97.5",
-        "contrib_age","contrib_level","contrib_u",
-        "pred_mean","pred_lo95","pred_hi95"
-    ]
-    df[cols].to_csv(output_csv, index=False)
-    if verbose:
-        print(f"[Save] predictions → {output_csv}")
-
+    df.to_csv(output_csv, index=False)
     return df
-
 
 
 

@@ -20,6 +20,7 @@
   - [Top Features](#top-features)
   - [Hierarchical Model Results](#hierarchical-model-results)
   - [Model Comparison](#model-comparison)
+  - [Model Comparison](#model-comparison-1)
   - [Best Performing Model](#best-performing-model)
   - [Model Components](#model-components)
   - [Project Structure](#project-structure)
@@ -155,17 +156,20 @@ Options:
 
 ## Model Comparison
 
+## Model Comparison
+
 | Model                              | Hyperparameters                                                                                                             | RMSE    | Explainability Tools                         |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------- |
-| Ridge Regression (Linear Baseline) | α=1.0; random\_state=0                                                                                                      | 2.0336  | statsmodels CIs; permutation importance      |
-| XGBoost GBM                        | n\_estimators=600; learning\_rate=0.05; max\_depth=6; subsample=0.7; colsample\_bytree=0.6; early\_stopping\_rounds=50; ... | 1.6656  | TreeSHAP; SmartExplainer; ExplainerDashboard |
-| Mixed-Effects Model (Hierarchical) | random intercepts (batter, season, pitcher); REML; optimizer=L-BFGS (maxiter=100; tol=1e-6)                                 | 13.8272 | statsmodels random-effects summaries         |
-| PyMC-HMC (NUTS)                    | draws=500; tune=500; chains=4; random\_seed=42; progressbar=False                                                           | 0.61    | ArviZ summaries; PPC plots                   |
-| PyMC-ADVI (VI)                     | method='advi'; n=2500; sample draws=250                                                                                     | 2.37    | ArviZ summaries; PPC plots                   |
-| Stan (CmdStanPy HMC)               | iter\_sampling=500; iter\_warmup=500; chains=4; seed=42; force\_compile=True; generated quantities→ y\_obs                  | 0.60    | ArviZ summaries; PPC plots                   |
-| JAGS (PyJAGS Gibbs)                | adapt=500; sample=500; chains=4; RNGs rotated; init seeds=42+10×chain                                                       | 0.61    | ArviZ summaries; PPC plots                   |
-| NumPyro (NUTS)                     | fraction=0.10; preallocate=False; draws=500; warmup=500; chains=4; progress\_bar=False; RNGKey=42; x64 enabled              | 0.60    | ArviZ summaries; PPC plots                   |
-| TFP-HMC (HMC)                      | step\_size=0.05; leapfrog\_steps=5; adaptation\_steps=400; draws=500; burnin=500; seed=42                                   | 0.61    | ArviZ summaries; PPC plots                   |
+| Ridge Regression (Linear Baseline) | α=1.0; random_state=0                                                                                                      | 8.34    | statsmodels CIs; permutation importance      |
+| XGBoost GBM                        | n_estimators=335; learning_rate=0.06318; max_depth=6; subsample=0.7943; colsample_bytree=0.9826                            | 7.8807  | TreeSHAP; SmartExplainer; ExplainerDashboard |
+| Mixed-Effects Model (Hierarchical) | random intercepts (batter, season, pitcher); REML; optimizer=L-BFGS (maxiter=100; tol=1e-6)                                 | 11.27   | statsmodels random-effects summaries         |
+| PyMC-HMC (NUTS)                    | draws=500; tune=500; chains=4; random_seed=42; progressbar=False                                                           | 9.11    | ArviZ summaries; PPC plots                   |
+| PyMC-ADVI (VI)                     | method='advi'; n=2500; sample draws=250                                                                                     | 6.89    | ArviZ summaries; PPC plots                   |
+| Stan (CmdStanPy HMC)               | iter_sampling=500; iter_warmup=500; chains=4; seed=42; force_compile=True; generated quantities→ y_obs                       | 7.56    | ArviZ summaries; PPC plots                   |
+| JAGS (PyJAGS Gibbs)                | adapt=500; sample=500; chains=4; RNGs rotated; init seeds=42+10×chain                                                       | 10.02   | ArviZ summaries; PPC plots                   |
+| NumPyro (NUTS)                     | fraction=0.10; preallocate=False; draws=500; warmup=500; chains=4; progress_bar=False; RNGKey=42; x64 enabled               | 6.45    | ArviZ summaries; PPC plots                   |
+| TFP-HMC (HMC)                      | step_size=0.05; leapfrog_steps=5; adaptation_steps=400; draws=500; burnin=500; seed=42                                      | 11.92   | ArviZ summaries; PPC plots                   |
+
 
 ## Best Performing Model
 
